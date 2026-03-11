@@ -1,0 +1,35 @@
+<Project>
+  <!-- Pre-codesign hygiene for Mac Catalyst:
+       - Ensure the .app bundle root contains no runtime artifacts
+       - Strip disallowed extended attributes (notably com.apple.FinderInfo) from the bundle root and contents
+  -->
+  <Target Name="CleanAppBundleBeforeCodesign"
+          AfterTargets="_CreateAppBundle"
+          BeforeTargets="CodesignAppBundle;_CodesignAppBundle;_CodesignNativeLibraries"
+          Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst' and '$(AppBundleDir)' != '' and Exists('$(MSBuildProjectDirectory)/$(AppBundleDir)')">
+    <PropertyGroup>
+      <_AppBundleFullPath>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(AppBundleDir)'))</_AppBundleFullPath>
+      <_RuntimeDbInBundle>$([System.IO.Path]::Combine('$(_AppBundleFullPath)','logs.db3'))</_RuntimeDbInBundle>
+    </PropertyGroup>
+
+    <Message Importance="High" Text="Pre-codesign cleanup: AppBundleDir=$(_AppBundleFullPath)" />
+
+    <!-- Defensive: remove any sqlite db that may have ended up in the bundle root -->
+    <Delete Files="$(_RuntimeDbInBundle)" ContinueOnError="true" />
+
+    <!-- Clear xattrs on the bundle root itself first, then recursively -->
+    <Exec Command="xattr -c &quot;$(_AppBundleFullPath)&quot; 2&gt;/dev/null" IgnoreExitCode="true" ContinueOnError="true" />
+    <Exec Command="xattr -rc &quot;$(_AppBundleFullPath)&quot; 2&gt;/dev/null" IgnoreExitCode="true" ContinueOnError="true" />
+
+    <!-- Explicitly drop FinderInfo if it is present on the bundle root (codesign rejects it) -->
+    <Exec Command="xattr -d com.apple.FinderInfo &quot;$(_AppBundleFullPath)&quot; 2&gt;/dev/null" IgnoreExitCode="true" ContinueOnError="true" />
+  </Target>
+
+  <Target Name="WorkaroundRemoveUnsupportedNativeSymbols"
+          AfterTargets="_LoadLinkerOutput"
+          Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">
+    <ItemGroup>
+      <_ProcessedReferenceNativeSymbol Remove="_SystemNative_ConfigureTerminalForChildProcess" />
+    </ItemGroup>
+  </Target>
+</Project>
