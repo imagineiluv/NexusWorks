@@ -1,0 +1,38 @@
+﻿@using SuperTutty.UI.Data
+@inherits LayoutComponentBase
+
+<div class="flex flex-col h-screen w-screen overflow-hidden bg-[#121212] text-[#cccccc]">
+
+    <CascadingValue Value="Chrome">
+        <TitleBar Content="Chrome.TitleBar" />
+    </CascadingValue>
+
+    <div class="flex flex-1 overflow-hidden">
+        <div class="flex-1 relative flex flex-col overflow-hidden min-h-0">
+            <CascadingValue Value="Chrome">
+                @Body
+            </CascadingValue>
+        </div>
+    </div>
+
+    <CascadingValue Value="Chrome">
+        <Footer Content="Chrome.Footer" />
+    </CascadingValue>
+
+</div>
+
+@code {
+    private readonly LayoutChrome Chrome = new();
+    [Parameter] public bool IsDetailPage { get; set; } = false;
+    [Parameter] public string PageTitle { get; set; } = "Sessions";
+    [Parameter] public RenderFragment? Title { get; set; }
+    [Parameter] public RenderFragment? Foot { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Chrome.PageTitle = PageTitle;
+        Chrome.TitleBar = Title;
+        Chrome.Footer = Foot;
+        Chrome.IsDetailPage = IsDetailPage;
+    }
+}

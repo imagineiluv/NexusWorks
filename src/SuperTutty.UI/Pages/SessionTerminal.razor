@@ -1,0 +1,373 @@
+@page "/session/{SessionId:int}/terminal"
+@implements IAsyncDisposable
+@using System.Net
+@using System.Text
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using SuperTutty.Services
+@using SuperTutty.UI.Data
+@using SuperTutty.UI.Services
+@inject NavigationManager NavigationManager
+@inject SessionManager SessionManager
+@inject SelectedSessionStore SelectedSessionStore
+@inject IJSRuntime JSRuntime
+@inject ILogStreamConnector LogStreamConnector
+
+<div class="relative flex flex-1 flex-col overflow-hidden" tabindex="0" @ref="ComponentElement">
+
+    @if (_platformUnsupported)
+    {
+        <div class="m-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-amber-100">
+            <div class="flex items-center gap-2 text-sm">
+                <span class="material-symbols-outlined">warning</span>
+                <span>@_platformMessage</span>
+            </div>
+            <p class="mt-2 text-xs text-amber-200/80">Use the Session Info page to run PowerShell-backed searches.</p>
+        </div>
+    }
+
+    @* Terminal Container *@
+    <div class="flex-grow p-4 overflow-hidden">
+        <div class="flex flex-col h-full min-h-0 bg-black text-white font-mono text-sm rounded-lg p-4"
+            @onmouseup="FocusComponent">
+
+            @* Virtualized Output Area *@
+            <div class="flex-1 min-h-0 overflow-hidden stty-terminal" @ref="TerminalContainerRef" tabindex="0"
+                @onclick="FocusTerminal"></div>
+
+            @* Input is handled inside xterm *@
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int SessionId { get; set; }
+
+    private SshSession CurrentSession { get; set; }
+    private string PromptHost => CurrentSession?.Host ?? "unknown";
+    private string SessionUser => CurrentSession?.Username ?? "user";
+
+    private ElementReference ComponentElement;
+    private ElementReference TerminalContainerRef;
+
+    private string _terminalId;
+
+    private TerminalOptions _terminalOptions = TerminalPreferences.LoadOptions();
+
+    private string _inputPrompt = string.Empty;
+
+    private DotNetObjectReference<SessionTerminal>? _dotNetRef;
+
+    // Buffer for partial lines (used to keep line-based fallback for errors)
+    private StringBuilder _lineBuffer = new StringBuilder();
+
+    private IRemoteLogStream _remoteLogStream;
+    private CancellationTokenSource _cts = new();
+    private bool _platformUnsupported;
+    private string _platformMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        CurrentSession = SelectedSessionStore.Current;
+        if (CurrentSession == null)
+        {
+            var sessions = await SessionManager.GetSessionsAsync();
+            if (SessionId > 0 && SessionId <= sessions.Count)
+            {
+                CurrentSession = sessions[SessionId - 1];
+            }
+        }
+
+        if (CurrentSession?.IsWindows == true)
+        {
+            // Windows(Local) is supported via a local persistent PowerShell process.
+            // Windows(Remote) is still unsupported in this Terminal page for now.
+            if (!IsLocalWindowsTarget(CurrentSession.Host))
+            {
+                _platformUnsupported = true;
+                _platformMessage = "Windows remote sessions use PowerShell/WinRM. Open Session Info to run PowerShell-backed searches.";
+                await base.OnInitializedAsync();
+                return;
+            }
+
+            await ConnectStreamAsync();
+            await base.OnInitializedAsync();
+            return;
+        }
+
+        if (CurrentSession != null)
+        {
+            await ConnectStreamAsync();
+        }
+
+        await base.OnInitializedAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ComponentElement.FocusAsync();
+
+            _dotNetRef = DotNetObjectReference.Create(this);
+
+            // Create xterm instance on first render
+            try
+            {
+                var jsOptions = _terminalOptions.ToJsOptions(BuildHistoryKey(CurrentSession));
+                _terminalId = await JSRuntime.InvokeAsync<string>("terminal.create", TerminalContainerRef, jsOptions);
+
+                _inputPrompt = BuildPrompt(CurrentSession);
+                await JSRuntime.InvokeVoidAsync("terminal.setPrompt", _terminalId, _inputPrompt);
+
+                await JSRuntime.InvokeVoidAsync("terminal.attachInput", _terminalId, _dotNetRef);
+            }
+            catch (Exception ex)
+            {
+                // If xterm init fails, we still keep app functional.
+            }
+        }
+        await ScrollToBottom(onlyIfNearBottom: true);
+    }
+
+    private async Task ScrollToBottom(bool onlyIfNearBottom)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("scrollToBottom", TerminalContainerRef, onlyIfNearBottom, 48);
+        }
+        catch
+        {
+            // Ignore JS errors if element not found during dispose/nav
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnTerminalEnter(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            await ExecuteCommandAsync(string.Empty);
+            if (!string.IsNullOrEmpty(_terminalId))
+            {
+                _inputPrompt = BuildPrompt(CurrentSession);
+                try { await JSRuntime.InvokeVoidAsync("terminal.setPrompt", _terminalId, _inputPrompt); } catch { }
+            }
+            return;
+        }
+
+        await ExecuteCommandAsync(line);
+
+        if (!string.IsNullOrEmpty(_terminalId))
+        {
+            _inputPrompt = BuildPrompt(CurrentSession);
+            try { await JSRuntime.InvokeVoidAsync("terminal.setPrompt", _terminalId, _inputPrompt); } catch { }
+        }
+    }
+
+    private static string BuildPrompt(SshSession? session)
+    {
+        if (session?.IsWindows == true)
+        {
+            // Keep it close to Windows PowerShell style; actual current directory is shown by PS itself in output.
+            return "PS ";
+        }
+
+        var user = string.IsNullOrWhiteSpace(session?.Username) ? "user" : session!.Username;
+        var host = string.IsNullOrWhiteSpace(session?.Host) ? "unknown" : session!.Host;
+        return $"{user}@{host}$ ";
+    }
+
+    private static string BuildHistoryKey(SshSession? session)
+    {
+        if (session == null)
+        {
+            return "session:unknown";
+        }
+
+        var user = string.IsNullOrWhiteSpace(session.Username) ? "user" : session.Username.Trim();
+        var host = string.IsNullOrWhiteSpace(session.Host) ? "unknown" : session.Host.Trim();
+        return $"session:{user}@{host}";
+    }
+
+    private async Task ConnectStreamAsync()
+    {
+        if (CurrentSession == null) return;
+
+        try
+        {
+            var options = new LogStreamOptions
+            {
+                Host = CurrentSession.Host,
+                Username = CurrentSession.Username,
+                Password = CurrentSession.Password,
+                Port = 22,
+                MaxReconnectAttempts = 3
+            };
+
+            _remoteLogStream = await LogStreamConnector.ConnectAsync(options, _cts.Token);
+            _ = ReadStreamLoopAsync();
+        }
+        catch (Exception ex)
+        {
+            if (!string.IsNullOrEmpty(_terminalId))
+            {
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("terminal.write", _terminalId,
+                    $"\r\nConnection failed: {ex.Message}\r\n");
+                }
+                catch { }
+            }
+        }
+    }
+
+    private static bool IsLocalWindowsTarget(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return false;
+        }
+
+        var normalized = host.Trim();
+        return string.Equals(normalized, "localhost", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(normalized, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(normalized, "::1", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(normalized, ".", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task ReadStreamLoopAsync()
+    {
+        if (_remoteLogStream == null) return;
+
+        var buffer = new char[4096];
+        try
+        {
+            while (!_cts.Token.IsCancellationRequested)
+            {
+                var read = await _remoteLogStream.ReadAsync(buffer, 0, buffer.Length, _cts.Token);
+                if (read <= 0) break;
+
+                var chunk = new string(buffer, 0, read);
+
+                if (!string.IsNullOrEmpty(_terminalId))
+                {
+                    try
+                    {
+                        await JSRuntime.InvokeVoidAsync("terminal.write", _terminalId, chunk);
+                        continue;
+                    }
+                    catch
+                    {
+                        // Fall back to line processing below
+                    }
+                }
+
+                // Process char by char (or chunk) to handle newlines correctly
+                for (int i = 0; i < read; i++)
+                {
+                    char c = buffer[i];
+                    if (c == '\n')
+                    {
+                        // Flush buffer as a new line
+                        var lineContent = _lineBuffer.ToString();
+                        // Handle \r if present (trim end)
+                        if (lineContent.EndsWith("\r"))
+                        {
+                            lineContent = lineContent.Substring(0, lineContent.Length - 1);
+                        }
+
+                        // If we don't have xterm, keep silent (legacy list removed in PoC)
+                        _lineBuffer.Clear();
+                    }
+                    else
+                    {
+                        _lineBuffer.Append(c);
+                    }
+                }
+
+                // Note: We don't display the partial buffer in this simple implementation
+                // until a newline arrives. This is common for line-based log viewers.
+                // If we want real-time char display (like typing), we'd need a different approach
+                // where the last line is dynamic.
+                // For now, let's assume line-based logs.
+                // However, to support prompt display (e.g. "user@host:~$ "), which doesn't end in newline,
+                // we might want to force flush or have a specific UI element for "current pending line".
+                // Given the constraints, I will leave the pending buffer hidden or append it to the last line?
+                // Actually, standard terminals show the pending line.
+                // Let's defer that complexity for now to ensure stability, or minimal implementation:
+                // We could add _lineBuffer to the UI as a separate "pending" line if we wanted.
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (!string.IsNullOrEmpty(_terminalId))
+            {
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("terminal.write", _terminalId,
+                    $"\r\nStream error: {ex.Message}\r\n");
+                }
+                catch { }
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ExecuteCommandAsync(string command)
+    {
+        if (_remoteLogStream == null) return;
+        await _remoteLogStream.WriteAsync(command, _cts.Token);
+    }
+
+    private async Task FocusComponent()
+    {
+        await ComponentElement.FocusAsync();
+    }
+
+    private async Task FocusTerminal()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminal.focus", _terminalId);
+        }
+        catch
+        {
+            await FocusComponent();
+        }
+    }
+
+    private void NavigateToTab(string tab)
+    {
+        NavigationManager.NavigateTo($"/session/{SessionId}/{tab}");
+    }
+
+    private string GetTabClass(string tab)
+    {
+        var currentPath = NavigationManager.Uri;
+        var isActive = currentPath.EndsWith($"/{tab}", StringComparison.OrdinalIgnoreCase);
+        return isActive
+        ? "flex-1 py-3 text-center text-sm font-semibold border-b-2 border-primary text-primary"
+        : "flex-1 py-3 text-center text-sm font-medium text-[#9E9E9E] border-b-2 border-transparent";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        if (_remoteLogStream != null)
+        {
+            await _remoteLogStream.DisposeAsync();
+        }
+
+        try { _dotNetRef?.Dispose(); } catch { }
+
+        if (!string.IsNullOrEmpty(_terminalId))
+        {
+            try { await JSRuntime.InvokeVoidAsync("terminal.dispose", _terminalId); } catch { }
+        }
+    }
+}

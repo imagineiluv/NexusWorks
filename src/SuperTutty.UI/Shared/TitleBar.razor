@@ -1,0 +1,281 @@
+@using SuperTutty.UI.Data
+@using SuperTutty.Services
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager NavigationManager
+@inject SessionManager SessionManager
+
+@if (Chrome?.IsDetailPage == true)
+{
+    <div
+        class="flex items-center p-4 pb-2 justify-between sticky top-0 z-10 bg-[#121212]/80 backdrop-blur-sm border-b border-[#1e1e1e]">
+
+        <div class="flex size-12 shrink-0 items-center justify-start">
+            <button
+                class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 bg-transparent text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0"
+                @onclick="NavigateBack">
+                <span class="material-symbols-outlined text-2xl">arrow_back</span>
+            </button>
+        </div>
+
+        <h1 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">@Chrome?.PageTitle
+        </h1>
+
+        <div class="flex w-12 items-center justify-end">
+            <button
+                class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 bg-transparent text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0"
+                @onclick="NavigateBack">
+                <span class="material-symbols-outlined text-2xl">close</span>
+            </button>
+        </div>
+    </div>
+}
+else
+{
+    <div
+        class="flex items-center p-4 pb-2 justify-between sticky top-0 z-10 bg-[#121212]/80 backdrop-blur-sm border-b border-[#1e1e1e]">
+
+        <h1 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">@Chrome?.PageTitle
+        </h1>
+
+        <div class="flex w-12 items-center justify-end">
+            <button
+                class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 bg-transparent text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0 transition-all duration-200 hover:scale-110 active:scale-95"
+                @onclick="OpenAddSessionModal">
+                <span class="material-symbols-outlined text-2xl">add</span>
+            </button>
+        </div>
+    </div>
+}
+
+@* Add Session Modal *@
+@if (_showAddSessionModal)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div class="w-full max-w-md mx-4 bg-[#1e1e1e] rounded-2xl shadow-2xl border border-[#2b2b2b] overflow-hidden">
+            @* Modal Header *@
+            <div class="flex items-center justify-between px-5 py-4 border-b border-[#2b2b2b]">
+                <h2 class="text-lg font-bold text-white">Add New Session</h2>
+                <button @onclick="CloseModal"
+                    class="flex items-center justify-center size-8 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+
+            @* Modal Body *@
+            <div class="px-5 py-4 space-y-4">
+                @* Session Name *@
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium text-gray-400">Session Name</label>
+                    <input @bind="_newSession.Name"
+                        class="w-full h-11 px-4 bg-[#121212] border border-[#2b2b2b] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="My Server" />
+                </div>
+
+                @* Host / IP Address *@
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium text-gray-400">Host / IP Address</label>
+                    <input @bind="_newSession.Host"
+                        class="w-full h-11 px-4 bg-[#121212] border border-[#2b2b2b] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="192.168.1.100 or example.com" />
+                </div>
+
+                @* Platform *@
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium text-gray-400">Platform</label>
+                    <div class="flex items-center gap-2">
+                        <button type="button" @onclick="() => SetPlatform(SessionPlatform.Linux)"
+                            class="px-3 py-2 rounded-lg border text-sm font-medium transition-colors @GetPlatformButtonClass(SessionPlatform.Linux)">
+                            <span class="material-symbols-outlined text-base mr-1">terminal</span>
+                            Linux / Unix
+                        </button>
+                        <button type="button" @onclick="() => SetPlatform(SessionPlatform.Windows)"
+                            class="px-3 py-2 rounded-lg border text-sm font-medium transition-colors @GetPlatformButtonClass(SessionPlatform.Windows)">
+                            <span class="material-symbols-outlined text-base mr-1">desktop_windows</span>
+                            Windows (PowerShell)
+                        </button>
+                    </div>
+                </div>
+
+                @* Port *@
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium text-gray-400">Port</label>
+                    <input @bind="_newSession.Port" type="number"
+                        class="w-full h-11 px-4 bg-[#121212] border border-[#2b2b2b] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="22" />
+                </div>
+
+                @* Username *@
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium text-gray-400">Username</label>
+                    <input @bind="_newSession.Username"
+                        class="w-full h-11 px-4 bg-[#121212] border border-[#2b2b2b] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="root" />
+                </div>
+
+                @* Password *@
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium text-gray-400">Password</label>
+                    <input @bind="_newSession.Password" type="password"
+                        class="w-full h-11 px-4 bg-[#121212] border border-[#2b2b2b] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="••••••••" />
+                </div>
+
+                @* Error Message *@
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div
+                        class="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                        <span class="material-symbols-outlined text-lg">error</span>
+                        <span>@_errorMessage</span>
+                    </div>
+                }
+            </div>
+
+            @* Modal Footer *@
+            <div class="flex items-center justify-end gap-3 px-5 py-4 border-t border-[#2b2b2b]">
+                <button @onclick="CloseModal"
+                    class="px-5 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200">
+                    Cancel
+                </button>
+                <button @onclick="SaveSession" disabled="@_isSaving"
+                    class="px-5 py-2.5 text-sm font-medium text-white bg-primary hover:bg-primary/80 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all duration-200 flex items-center gap-2">
+                    @if (_isSaving)
+                    {
+                        <span class="material-symbols-outlined text-lg animate-spin">progress_activity</span>
+                    }
+                    <span>Save Session</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] LayoutChrome Chrome { get; set; }
+
+    [Parameter] public RenderFragment? Content { get; set; }
+
+    // Modal State
+    private bool _showAddSessionModal = false;
+    private bool _isSaving = false;
+    private string _errorMessage = string.Empty;
+    private NewSessionModel _newSession = new();
+
+    protected override void OnParametersSet()
+    {
+        this.Content = Chrome.TitleBar;
+    }
+
+    // 뒤로 가기 및 닫기 버튼 액션
+    private void NavigateBack()
+    {
+        Chrome.IsDetailPage = false;
+        Chrome.PageTitle = "Sessions";
+
+        NavigationManager.NavigateTo("/");
+    }
+
+    private void OpenAddSessionModal()
+    {
+        _newSession = new NewSessionModel();
+        _errorMessage = string.Empty;
+        _showAddSessionModal = true;
+    }
+
+    private void CloseModal()
+    {
+        _showAddSessionModal = false;
+        _errorMessage = string.Empty;
+    }
+
+    private async Task SaveSession()
+    {
+        // Validation
+        if (string.IsNullOrWhiteSpace(_newSession.Host))
+        {
+            _errorMessage = "Host / IP Address is required";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_newSession.Username))
+        {
+            _errorMessage = "Username is required";
+            return;
+        }
+
+        _isSaving = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            // Create SshSession with all parameters
+            var sessionName = string.IsNullOrWhiteSpace(_newSession.Name)
+            ? _newSession.Host.Trim()
+            : _newSession.Name.Trim();
+
+            var session = new SshSession(
+            _newSession.Host.Trim(),
+            _newSession.Username.Trim(),
+            _newSession.Password ?? string.Empty,
+            sessionName,
+            _newSession.Port,
+            _newSession.Platform
+            );
+
+            // Save to SessionManager
+            await SessionManager.SaveSessionAsync(session);
+
+            // Close modal and refresh
+            _showAddSessionModal = false;
+
+            // Trigger page refresh by navigating
+            NavigationManager.NavigateTo("/", forceLoad: false);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to save session: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+
+    }
+
+    private void SetPlatform(SessionPlatform platform)
+    {
+        if (_newSession.Platform == platform)
+        {
+            return;
+        }
+
+        var previousPort = _newSession.Port;
+        _newSession.Platform = platform;
+
+        if (platform == SessionPlatform.Windows && (previousPort == 22 || previousPort == 0))
+        {
+            _newSession.Port = 5985;
+        }
+        else if (platform == SessionPlatform.Linux && previousPort == 5985)
+        {
+            _newSession.Port = 22;
+        }
+    }
+
+    private string GetPlatformButtonClass(SessionPlatform platform)
+    {
+        var isSelected = _newSession.Platform == platform;
+        return isSelected
+        ? "border-primary bg-primary/10 text-white"
+        : "border-[#2b2b2b] text-[#9E9E9E] hover:border-primary/40 hover:text-white";
+    }
+
+    private sealed class NewSessionModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Host { get; set; } = string.Empty;
+        public int Port { get; set; } = 22;
+        public string Username { get; set; } = string.Empty;
+        public string? Password { get; set; }
+        public SessionPlatform Platform { get; set; } = SessionPlatform.Linux;
+    }
+}

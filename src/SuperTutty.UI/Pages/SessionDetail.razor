@@ -1,0 +1,15 @@
+@page "/session/{SessionId:int}"
+@inject NavigationManager NavigationManager
+
+@* This page redirects to the terminal tab by default *@
+
+@code {
+    [Parameter]
+    public int SessionId { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Redirect to terminal tab when accessing /session/{id}
+        NavigationManager.NavigateTo($"/session/{SessionId}/terminal", replace: true);
+    }
+}

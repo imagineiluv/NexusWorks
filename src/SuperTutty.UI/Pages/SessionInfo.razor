@@ -1,0 +1,343 @@
+@page "/session/{SessionId:int}/info"
+@using SuperTutty.Services
+@using SuperTutty.Services.Remote
+@using SuperTutty.UI.Data
+@using SuperTutty.UI.Services
+@inject NavigationManager NavigationManager
+@inject SessionManager SessionManager
+@inject SelectedSessionStore SelectedSessionStore
+@inject IRemoteShellService RemoteShellService
+
+<div class="relative flex flex-1 flex-col overflow-hidden">
+
+    @* Info Content *@
+    <div class="flex-grow p-4 overflow-y-auto">
+        <div class="space-y-6">
+            @* Session Information Card *@
+            <div class="rounded-lg bg-[#1e1e1e] p-4">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">info</span>
+                    Session Information
+                </h3>
+
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center py-2 border-b border-slate-700">
+                        <span class="text-[#9E9E9E]">Session ID</span>
+                        <span class="text-white font-medium">@SessionId</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-slate-700">
+                        <span class="text-[#9E9E9E]">Host</span>
+                        <span class="text-white font-medium">@(CurrentSession?.Host ?? "N/A")</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-slate-700">
+                        <span class="text-[#9E9E9E]">Username</span>
+                        <span class="text-white font-medium">@(CurrentSession?.Username ?? "N/A")</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-slate-700">
+                        <span class="text-[#9E9E9E]">Port</span>
+                        <span class="text-white font-medium">22</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2">
+                        <span class="text-[#9E9E9E]">Status</span>
+                        <span class="flex items-center gap-2">
+                            <span class="h-2 w-2 rounded-full @(IsConnected ? "bg-green-400" : "bg-red-400")"></span>
+                            <span class="text-white font-medium">@(IsConnected ? "Connected" : "Disconnected")</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            @* Connection Settings Card *@
+            <div class="rounded-lg bg-[#1e1e1e] p-4">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">settings</span>
+                    Connection Settings
+                </h3>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-[#9E9E9E] mb-2">Timeout (seconds)</label>
+                        <input type="number" value="30"
+                            class="w-full rounded-lg bg-[#121212] border border-slate-700 px-3 py-2 text-white focus:border-primary focus:outline-none" />
+                    </div>
+                    <div>
+                        <label class="block text-sm text-[#9E9E9E] mb-2">Keep Alive Interval (seconds)</label>
+                        <input type="number" value="60"
+                            class="w-full rounded-lg bg-[#121212] border border-slate-700 px-3 py-2 text-white focus:border-primary focus:outline-none" />
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[#9E9E9E]">Auto Reconnect</span>
+                        <button
+                            class="relative inline-flex h-6 w-11 items-center rounded-full @(AutoReconnect ? "bg-primary" : "bg-slate-600")"
+                            @onclick="() => AutoReconnect = !AutoReconnect">
+                            <span
+                                class="inline-block h-4 w-4 transform rounded-full bg-white transition @(AutoReconnect ? "translate-x-6" : "translate-x-1")"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            @* Quick Actions Card *@
+            <div class="rounded-lg bg-[#1e1e1e] p-4">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">bolt</span>
+                    Quick Actions
+                </h3>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button
+                        class="flex items-center justify-center gap-2 rounded-lg bg-primary/20 p-3 text-primary hover:bg-primary/30 transition-colors">
+                        <span class="material-symbols-outlined">refresh</span>
+                        <span>Reconnect</span>
+                    </button>
+                    <button
+                        class="flex items-center justify-center gap-2 rounded-lg bg-amber-500/20 p-3 text-amber-400 hover:bg-amber-500/30 transition-colors">
+                        <span class="material-symbols-outlined">edit</span>
+                        <span>Edit Session</span>
+                    </button>
+                    <button
+                        class="flex items-center justify-center gap-2 rounded-lg bg-blue-500/20 p-3 text-blue-400 hover:bg-blue-500/30 transition-colors">
+                        <span class="material-symbols-outlined">content_copy</span>
+                        <span>Duplicate</span>
+                    </button>
+                    <button
+                        class="flex items-center justify-center gap-2 rounded-lg bg-red-500/20 p-3 text-red-400 hover:bg-red-500/30 transition-colors"
+                        @onclick="DeleteSession">
+                        <span class="material-symbols-outlined">delete</span>
+                        <span>Delete</span>
+                    </button>
+                </div>
+            </div>
+
+            @* Remote Search / Find *@
+            <div class="rounded-lg bg-[#1e1e1e] p-4 space-y-4">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">travel_explore</span>
+                        <h3 class="text-lg font-semibold text-white">Remote Search / Find</h3>
+                    </div>
+                    <span class="text-xs text-[#9E9E9E]">Platform: @(CurrentSession?.Platform.ToString() ??
+                                                "Unknown")</span>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button class="@GetSearchToggleClass(false)" @onclick="() => _isFindMode = false" type="button">
+                        <span class="material-symbols-outlined text-sm">search</span>
+                        Search</button>
+                    <button class="@GetSearchToggleClass(true)" @onclick="() => _isFindMode = true" type="button">
+                        <span class="material-symbols-outlined text-sm">travel_explore</span>
+                        Find</button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="space-y-1.5">
+                        <label class="text-sm text-[#9E9E9E]">Root Path</label>
+                        <input @bind="_searchPath" @bind:event="oninput"
+                            class="w-full rounded-lg bg-[#121212] border border-[#2b2b2b] px-3 py-2 text-white focus:border-primary focus:outline-none" />
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-sm text-[#9E9E9E]">@(_isFindMode ? "Name Pattern" : "Search Pattern")</label>
+                        <input @bind="_searchPattern" @bind:event="oninput"
+                            class="w-full rounded-lg bg-[#121212] border border-[#2b2b2b] px-3 py-2 text-white focus:border-primary focus:outline-none" />
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-[#9E9E9E]">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" @bind="_ignoreCase" />
+                            <span>Ignore case</span>
+                        </label>
+                        @if (!_isFindMode)
+                        {
+                            <label class="inline-flex items-center gap-2">
+                                <input type="checkbox" @bind="_useRegex" />
+                                <span>Use regex</span>
+                            </label>
+                        }
+                        @if (_isFindMode)
+                        {
+                            <label class="inline-flex items-center gap-2">
+                                <input type="checkbox" @bind="_filesOnly" />
+                                <span>Files only</span>
+                            </label>
+                        }
+                    </div>
+                    <div class="flex items-center gap-3">
+                        @if (_isFindMode)
+                        {
+                            <div class="space-y-1.5 w-full">
+                                <label class="text-sm text-[#9E9E9E]">Max Depth (optional)</label>
+                                <input type="number" @bind="_maxDepth" @bind:event="oninput"
+                                    class="w-full rounded-lg bg-[#121212] border border-[#2b2b2b] px-3 py-2 text-white focus:border-primary focus:outline-none" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="space-y-1.5 w-full">
+                                <label class="text-sm text-[#9E9E9E]">Context Lines</label>
+                                <input type="number" @bind="_contextLines" @bind:event="oninput"
+                                    class="w-full rounded-lg bg-[#121212] border border-[#2b2b2b] px-3 py-2 text-white focus:border-primary focus:outline-none" />
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2 text-xs text-[#9E9E9E]">
+                        <span class="material-symbols-outlined text-base">info</span>
+                        <span>Commands route through SSH for Linux or PowerShell Remoting for Windows.</span>
+                    </div>
+                    <button
+                        class="px-4 py-2 rounded-lg bg-primary text-white font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                        disabled="@_remoteCommandRunning" @onclick="RunRemoteCommandAsync">
+                        @if (_remoteCommandRunning)
+                        {
+                            <span class="material-symbols-outlined text-base mr-1 animate-spin">progress_activity</span>
+                        }
+                        Run @(_isFindMode ? "Find" : "Search")
+                    </button>
+                </div>
+
+                <div class="rounded-lg bg-[#0f0f0f] border border-[#2b2b2b] p-3 space-y-2">
+                    <div class="flex items-center justify-between text-xs text-[#9E9E9E]">
+                        <span>Status: @_remoteStatus</span>
+                        <span>@(_lastExitCode.HasValue ? $"Exit {_lastExitCode}" : string.Empty)</span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_remoteStdOut))
+                    {
+                        <pre class="whitespace-pre-wrap text-sm text-white">@_remoteStdOut</pre>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_remoteStdErr))
+                    {
+                        <pre class="whitespace-pre-wrap text-sm text-red-400">@_remoteStdErr</pre>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int SessionId { get; set; }
+
+    private SshSession? CurrentSession { get; set; }
+    private bool IsConnected { get; set; } = true;
+    private bool AutoReconnect { get; set; } = true;
+    private string _searchPath = "/var/log";
+    private string _searchPattern = "error";
+    private bool _ignoreCase = true;
+    private bool _useRegex = true;
+    private int? _contextLines = 1;
+    private int? _maxDepth = 3;
+    private bool _filesOnly = true;
+    private bool _isFindMode;
+    private bool _remoteCommandRunning;
+    private string _remoteStatus = "Idle";
+    private string _remoteStdOut = string.Empty;
+    private string _remoteStdErr = string.Empty;
+    private int? _lastExitCode;
+
+    protected override async Task OnInitializedAsync()
+    {
+        CurrentSession = SelectedSessionStore.Current;
+        if (CurrentSession == null)
+        {
+            var sessions = await SessionManager.GetSessionsAsync();
+            if (SessionId > 0 && SessionId <= sessions.Count)
+            {
+                CurrentSession = sessions[SessionId - 1];
+            }
+        }
+
+        ApplyPlatformDefaults();
+
+        await base.OnInitializedAsync();
+    }
+
+    private void ApplyPlatformDefaults()
+    {
+        if (CurrentSession == null)
+        {
+            return;
+        }
+
+        _searchPath = CurrentSession.IsWindows ? "C:/logs" : "/var/log";
+        _filesOnly = true;
+        _isFindMode = false;
+    }
+
+    private void NavigateToTab(string tab)
+    {
+        NavigationManager.NavigateTo($"/session/{SessionId}/{tab}");
+    }
+
+    private string GetSearchToggleClass(bool findMode)
+    {
+        var isActive = _isFindMode == findMode;
+        return isActive
+        ? "px-3 py-2 rounded-lg bg-primary/20 text-primary border border-primary/40"
+        : "px-3 py-2 rounded-lg bg-[#161616] text-[#9E9E9E] border border-[#2b2b2b] hover:border-primary/30";
+    }
+
+    private async Task RunRemoteCommandAsync()
+    {
+        if (CurrentSession == null)
+        {
+            _remoteStatus = "No session selected";
+            return;
+        }
+
+        _remoteCommandRunning = true;
+        _remoteStatus = "Running";
+        _remoteStdOut = string.Empty;
+        _remoteStdErr = string.Empty;
+        _lastExitCode = null;
+
+        try
+        {
+            CommandResult result;
+            if (_isFindMode)
+            {
+                var findOptions = new FindOptions(_maxDepth, _filesOnly, TimeSpan.FromSeconds(30));
+                result = await RemoteShellService.FindAsync(CurrentSession, _searchPath, _searchPattern, findOptions);
+            }
+            else
+            {
+                var searchOptions = new SearchOptions(_ignoreCase, _useRegex, _contextLines, TimeSpan.FromSeconds(30));
+                result = await RemoteShellService.SearchAsync(CurrentSession, _searchPath, _searchPattern, searchOptions);
+            }
+
+            _remoteStatus = result.IsSuccess ? "Completed" : "Completed with errors";
+            _lastExitCode = result.ExitCode;
+            _remoteStdOut = result.StdOut;
+            _remoteStdErr = result.StdErr;
+        }
+        catch (Exception ex)
+        {
+            _remoteStatus = "Failed";
+            _remoteStdErr = ex.Message;
+        }
+        finally
+        {
+            _remoteCommandRunning = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string GetTabClass(string tab)
+    {
+        var currentPath = NavigationManager.Uri;
+        var isActive = currentPath.EndsWith($"/{tab}", StringComparison.OrdinalIgnoreCase);
+        return isActive
+        ? "flex-1 py-3 text-center text-sm font-semibold border-b-2 border-primary text-primary"
+        : "flex-1 py-3 text-center text-sm font-medium text-[#9E9E9E] border-b-2 border-transparent";
+    }
+
+    private void DeleteSession()
+    {
+        // TODO: Implement delete confirmation and actual deletion
+        NavigationManager.NavigateTo("/");
+    }
+}

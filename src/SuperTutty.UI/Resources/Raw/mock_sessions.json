@@ -1,0 +1,35 @@
+[
+    {
+        "Host": "test.rebex.net",
+        "Username": "demo",
+        "Password": "password"
+    },
+    {
+        "Host": "staging.db.internal",
+        "Username": "dbuser",
+        "Password": "securepass"
+    },
+    {
+        "Host": "winlog.internal",
+        "Username": "Administrator",
+        "Password": "P@ssw0rd",
+        "Port": 5985,
+        "Platform": "Windows"
+    },
+    {
+        "Host": "localhost",
+        "Username": "",
+        "Password": "",
+        "Port": 0,
+        "Platform": "Windows",
+        "Name": "Windows (Local)"
+    },
+    {
+        "Host": "localhost",
+        "Username": "",
+        "Password": "",
+        "Port": 0,
+        "Platform": "Linux",
+        "Name": "Mac (Local)"
+    }
+]

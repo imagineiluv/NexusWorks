@@ -1,0 +1,1069 @@
+@page "/session/{SessionId:int}/task"
+@implements IAsyncDisposable
+@using System.Text.RegularExpressions
+@using Microsoft.Extensions.Options
+@using SuperTutty.Services
+@using SuperTutty.Services.Tasks
+@using SuperTutty.UI.Data
+@inject NavigationManager NavigationManager
+@inject SessionManager SessionManager
+@inject SelectedSessionStore SelectedSessionStore
+@inject IJSRuntime JSRuntime
+@inject ILogStreamService LogStreamService
+@inject IOptions<LogStreamOptions> LogStreamOptions
+@inject ITaskManager TaskManager
+@inject IStreamTaskFactory TaskFactory
+@inject ISessionStorage SessionStorage
+
+<div class="relative flex flex-1 flex-col overflow-hidden">
+
+    @* Logs Content *@
+    <div class="flex-grow overflow-hidden">
+        <div class="px-4 py-3">
+            <label class="flex h-12 w-full min-w-40 flex-col">
+                <div class="flex h-full w-full flex-1 items-stretch rounded-lg">
+                    <div class="flex items-center justify-center rounded-l-lg border-r-0 border-[#1e1e1e] bg-[#1e1e1e] pl-4 text-[#9E9E9E]">
+                        <span class="material-symbols-outlined text-2xl">search</span>
+                    </div>
+                    <input @bind="LogSearchTerm" @bind:event="oninput"
+                        class="form-input h-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-lg border-none bg-[#1e1e1e] px-4 pl-2 text-base font-normal leading-normal text-white placeholder:text-[#9E9E9E] focus:outline-0 focus:ring-0"
+                        placeholder="Search logs by keywords" />
+                </div>
+            </label>
+        </div>
+
+        <div class="flex gap-3 overflow-x-auto p-3 pt-0">
+            <button class="@GetFilterClass("All")" @onclick='() => SetLogFilter("All")'>
+                <p class="text-white text-sm font-medium leading-normal">All</p>
+            </button>
+            <button class="@GetFilterClass("Info")" @onclick='() => SetLogFilter("Info")'>
+                <p class="text-white text-sm font-medium leading-normal">Info</p>
+            </button>
+            <button class="@GetFilterClass("Warn")" @onclick='() => SetLogFilter("Warn")'>
+                <p class="text-white text-sm font-medium leading-normal">Warn</p>
+            </button>
+            <button class="@GetFilterClass("Error")" @onclick='() => SetLogFilter("Error")'>
+                <p class="text-white text-sm font-medium leading-normal">Error</p>
+            </button>
+            <button class="@GetFilterClass("Critical")" @onclick='() => SetLogFilter("Critical")'>
+                <p class="text-white text-sm font-medium leading-normal">Critical</p>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-1 px-4 pb-4 overflow-y-auto" style="max-height: calc(100vh - 280px);" @ref="LogEntriesContainerRef">
+            @foreach (var entry in FilteredLogEntries)
+            {
+                <div class="flex items-center gap-4 min-h-[72px] rounded-lg bg-[#1e1e1e]/50 p-3 hover:bg-[#262626] transition-colors">
+                    <div class="flex size-10 shrink-0 items-center justify-center rounded-full @GetLevelBgClass(entry.Level)">
+                        <span class="material-symbols-outlined @GetLevelTextClass(entry.Level) text-xl">@GetLevelIcon(entry.Level)</span>
+                    </div>
+                    <div class="flex flex-1 flex-col justify-center">
+                        <p class="text-base font-medium leading-normal text-white">[@entry.Level.ToUpper()] @entry.Message</p>
+                        @if (!string.IsNullOrEmpty(entry.Timestamp))
+                        {
+                            <p class="text-sm font-normal leading-normal text-[#9E9E9E]">@entry.Timestamp</p>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (!FilteredLogEntries.Any())
+            {
+                <div class="flex flex-col items-center justify-center py-12 text-[#9E9E9E]">
+                    <span class="material-symbols-outlined text-4xl mb-2">description</span>
+                    <p class="text-sm">No log entries found</p>
+                </div>
+            }
+        </div>
+
+        @* Bottom Sheet Tasks Panel - positioned above footer (h-10 + h-7 = 68px) *@
+        <div class="fixed left-0 right-0 z-50" style="bottom: 68px;">
+            <div class="w-full rounded-t-xl bg-[#1d2833] shadow-lg transition-all duration-300 ease-out overflow-hidden"
+                 style="max-height: @(IsTaskPanelMinimized ? "40px" : "50vh");">
+                @* Drag Handle & Header *@
+                <div class="flex items-center justify-between px-3 cursor-pointer select-none transition-all duration-200 @(IsTaskPanelMinimized ? "py-2.5" : "py-3 px-4")"
+                     @onclick="ToggleTaskPanel"
+                     @ontouchstart="OnTouchStart"
+                     @ontouchmove="OnTouchMove"
+                     @ontouchend="OnTouchEnd">
+                    <div class="flex items-center gap-2">
+                        <div class="h-1 w-6 rounded-full bg-gray-600 transition-all duration-200"></div>
+                        <h3 class="@(IsTaskPanelMinimized ? "text-xs" : "text-sm") font-bold text-white transition-all duration-200">Tasks</h3>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-gray-400 transition-all duration-300 ease-out @(IsTaskPanelMinimized ? "text-base rotate-0" : "text-xl rotate-180")">expand_less</span>
+                        <button @onclick="OpenAddTaskModal" @onclick:stopPropagation="true" 
+                                class="flex items-center justify-center text-primary transition-all duration-200 ease-out active:scale-90 @(IsTaskPanelMinimized ? "size-6" : "size-8") hover:text-primary/80 hover:scale-105">
+                            <span class="material-symbols-outlined @(IsTaskPanelMinimized ? "text-lg" : "text-2xl") transition-all duration-200">add_circle</span>
+                        </button>
+                    </div>
+                </div>
+                
+                @* Task List - only visible when expanded *@
+                @if (!IsTaskPanelMinimized)
+                {
+                    <ul class="flex flex-col gap-1 px-4 pt-1 pb-4 overflow-y-auto" style="max-height: calc(50vh - 56px);">
+                        @if (TaskManager.Tasks.Count == 0)
+                        {
+                            <li class="flex flex-col items-center justify-center py-8 text-gray-400">
+                                <span class="material-symbols-outlined text-3xl mb-2">task</span>
+                                <p class="text-sm">No tasks yet</p>
+                                <p class="text-xs text-gray-500 mt-1">Click + to add a new task</p>
+                            </li>
+                        }
+                        @foreach (var task in TaskManager.Tasks)
+                        {
+                            <li class="flex h-16 items-center gap-4 rounded-lg p-3 @GetTaskItemClass(task) transition-colors">
+                                <span class="material-symbols-outlined @GetTaskStatusIconClass(task.Status)">@GetTaskStatusIcon(task.Status)</span>
+                                <div class="flex flex-1 flex-col min-w-0">
+                                    <p class="truncate text-base font-medium leading-tight text-white">@task.Name</p>
+                                    <p class="truncate text-xs text-gray-400">@task.LogFilePath</p>
+                                </div>
+                                @if (task.Status == StreamTaskStatus.Running)
+                                {
+                                    <button @onclick="() => StopTaskAsync(task.Id)" @onclick:stopPropagation="true"
+                                            class="flex size-8 items-center justify-center text-amber-400 hover:text-amber-500 transition-colors">
+                                        <span class="material-symbols-outlined text-xl">pause_circle</span>
+                                    </button>
+                                }
+                                else
+                                {
+                                    @if (task.Status == StreamTaskStatus.Cancelled || task.Status == StreamTaskStatus.Completed || task.Status == StreamTaskStatus.Error)
+                                    {
+                                        <button @onclick="() => OpenEditTaskModalAsync(task.Id)" @onclick:stopPropagation="true"
+                                                class="flex size-8 items-center justify-center text-gray-300 hover:text-white transition-colors">
+                                            <span class="material-symbols-outlined text-xl">edit</span>
+                                        </button>
+                                    }
+                                    <button @onclick="() => StartTaskAsync(task.Id)" @onclick:stopPropagation="true"
+                                            class="flex size-8 items-center justify-center text-primary hover:text-primary/80 transition-colors">
+                                        <span class="material-symbols-outlined text-xl">play_circle</span>
+                                    </button>
+                                }
+                                <button @onclick="() => RemoveTaskAsync(task.Id)" @onclick:stopPropagation="true"
+                                        class="flex size-8 items-center justify-center text-red-400 hover:text-red-500 transition-colors">
+                                    <span class="material-symbols-outlined text-xl">delete</span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Add Task Modal *@
+@if (_showAddTaskModal)
+{
+    <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div class="flex max-h-[90vh] w-[400px] max-w-[90vw] flex-col bg-[#1a1a1a] rounded-2xl shadow-2xl border border-[#2b2b2b] overflow-hidden"
+             @onclick:stopPropagation="true">
+            @* Modal Header *@
+            <div class="flex items-center justify-between px-6 py-4 border-b border-[#2b2b2b]">
+                <h2 class="text-lg font-bold text-white">@(_editingTaskId.HasValue ? "Edit Task" : "Add New Task")</h2>
+                <button @onclick="CloseAddTaskModal" 
+                        class="flex size-8 items-center justify-center rounded-full text-gray-400 hover:bg-white/10 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            
+            @* Modal Body *@
+            <div class="flex flex-1 flex-col gap-3 overflow-y-auto p-6">
+                @* Task Name *@
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-sm font-medium text-gray-400">Task Name</label>
+                    <input @bind="_newTaskName" 
+                           class="h-11 w-full rounded-lg border border-[#3b3b3b] bg-[#262626] px-4 text-white placeholder:text-gray-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
+                           placeholder="e.g., System Log Monitor" />
+                </div>
+                
+                @* Log File Path *@
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-sm font-medium text-gray-400">Log File Path</label>
+                    <input @bind="_newTaskLogPath" 
+                           class="h-11 w-full rounded-lg border border-[#3b3b3b] bg-[#262626] px-4 text-white placeholder:text-gray-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors font-mono text-sm"
+                           placeholder="/var/log/syslog" />
+                </div>
+                
+                @* Session Info (Read-only) *@
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-sm font-medium text-gray-400">Target Session</label>
+                    <div class="flex items-center gap-3 h-11 w-full rounded-lg border border-[#3b3b3b] bg-[#1e1e1e] px-4">
+                        <span class="material-symbols-outlined text-primary text-lg">dns</span>
+                        <span class="text-white text-sm">@(CurrentSession?.Name ?? "No session")</span>
+                        <span class="text-gray-500 text-xs">(@(CurrentSession?.IpAddress ?? "N/A"):@(CurrentSession?.Port ?? 22))</span>
+                    </div>
+                </div>
+                
+                @* Auto Start Toggle *@
+                <div class="flex items-center justify-between py-1">
+                    <div class="flex flex-col">
+                        <span class="text-sm font-medium text-white">Auto Start</span>
+                        <span class="text-xs text-gray-500">Start streaming immediately after adding</span>
+                    </div>
+                    <button @onclick="() => _autoStartTask = !_autoStartTask"
+                            class="relative h-6 w-11 rounded-full transition-colors @(_autoStartTask ? "bg-primary" : "bg-[#3b3b3b]")">
+                        <span class="absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform @(_autoStartTask ? "left-6" : "left-1")"></span>
+                    </button>
+                </div>
+                
+                @* Analyzer Options *@
+                <div class="flex flex-col gap-1.5 py-1">
+                    <span class="text-sm font-medium text-gray-400">Analyzers</span>
+                    <div class="flex flex-col gap-1.5 rounded-lg border border-[#3b3b3b] bg-[#1e1e1e] p-3">
+                        @* Drain Log Parser *@
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-cyan-400 text-lg">hub</span>
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-white">Drain Log Parser</span>
+                                    <span class="text-xs text-gray-500">Log clustering & pattern extraction</span>
+                                </div>
+                            </div>
+                            <button @onclick="() => _useDrainParser = !_useDrainParser"
+                                    class="relative h-5 w-9 rounded-full transition-colors @(_useDrainParser ? "bg-cyan-500" : "bg-[#3b3b3b]")">
+                                <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform @(_useDrainParser ? "left-4" : "left-0.5")"></span>
+                            </button>
+                        </div>
+                        
+                        @* Transaction Analyzer *@
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-amber-400 text-lg">swap_horiz</span>
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-white">Transaction Analyzer</span>
+                                    <span class="text-xs text-gray-500">Transaction tracking & analysis</span>
+                                </div>
+                            </div>
+                            <button @onclick="() => _useTransactionAnalyzer = !_useTransactionAnalyzer"
+                                    class="relative h-5 w-9 rounded-full transition-colors @(_useTransactionAnalyzer ? "bg-amber-500" : "bg-[#3b3b3b]")">
+                                <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform @(_useTransactionAnalyzer ? "left-4" : "left-0.5")"></span>
+                            </button>
+                        </div>
+                        
+                        @* Equipment Analyzer *@
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-green-400 text-lg">precision_manufacturing</span>
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-white">Equipment Analyzer</span>
+                                    <span class="text-xs text-gray-500">Equipment state monitoring</span>
+                                </div>
+                            </div>
+                            <button @onclick="() => _useEquipmentAnalyzer = !_useEquipmentAnalyzer"
+                                    class="relative h-5 w-9 rounded-full transition-colors @(_useEquipmentAnalyzer ? "bg-green-500" : "bg-[#3b3b3b]")">
+                                <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform @(_useEquipmentAnalyzer ? "left-4" : "left-0.5")"></span>
+                            </button>
+                        </div>
+                        
+                        @* Persist Logs *@
+                        <div class="flex items-center justify-between border-t border-[#3b3b3b] pt-2 mt-1">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-purple-400 text-lg">database</span>
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-white">Persist Logs</span>
+                                    <span class="text-xs text-gray-500">Save logs to database</span>
+                                </div>
+                            </div>
+                            <button @onclick="() => _persistLogs = !_persistLogs"
+                                    class="relative h-5 w-9 rounded-full transition-colors @(_persistLogs ? "bg-purple-500" : "bg-[#3b3b3b]")">
+                                <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform @(_persistLogs ? "left-4" : "left-0.5")"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                @* Filter Options *@
+                <div class="flex flex-col gap-1.5 py-1">
+                    <span class="text-sm font-medium text-gray-400">Filter (Optional)</span>
+                    <div class="flex flex-col gap-2 rounded-lg border border-[#3b3b3b] bg-[#1e1e1e] p-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex flex-col">
+                                <span class="text-sm text-white">Mode</span>
+                                <span class="text-xs text-gray-500">Text or Regex</span>
+                            </div>
+                            <div class="flex h-8 items-center rounded-lg border border-[#3b3b3b] bg-[#262626] p-1">
+                                <button type="button" @onclick="() => _filterKind = LogStreamFilterKind.FixedString"
+                                        class="h-6 px-3 rounded-md text-xs font-medium transition-colors @(_filterKind == LogStreamFilterKind.FixedString ? "bg-primary text-white" : "text-gray-400 hover:bg-white/5")">
+                                    Text
+                                </button>
+                                <button type="button" @onclick="() => _filterKind = LogStreamFilterKind.Regex"
+                                        class="h-6 px-3 rounded-md text-xs font-medium transition-colors @(_filterKind == LogStreamFilterKind.Regex ? "bg-primary text-white" : "text-gray-400 hover:bg-white/5")">
+                                    Regex
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex items-center justify-between">
+                                <label class="text-sm font-medium text-gray-400">Include</label>
+                                <button type="button" @onclick="AddIncludePattern"
+                                        class="flex h-8 w-8 items-center justify-center rounded-md border border-[#3b3b3b] bg-[#262626] text-gray-300 hover:bg-white/5">
+                                    <span class="material-symbols-outlined text-lg">add</span>
+                                </button>
+                            </div>
+
+                            @for (var i = 0; i < _filterIncludePatterns.Count; i++)
+                            {
+                                <div class="flex items-center gap-2">
+                                    <input value="@_filterIncludePatterns[i]"
+                                           @oninput="e => _filterIncludePatterns[i] = e.Value?.ToString() ?? string.Empty"
+                                           class="h-11 min-w-0 flex-1 rounded-lg border border-[#3b3b3b] bg-[#262626] px-4 text-white placeholder:text-gray-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors font-mono text-sm"
+                                           placeholder="e.g., ERROR" />
+                                    <button type="button" @onclick="() => RemoveIncludePattern(i)"
+                                            class="flex h-11 w-11 items-center justify-center rounded-lg border border-[#3b3b3b] bg-[#262626] text-gray-300 hover:bg-white/5">
+                                        <span class="material-symbols-outlined text-xl">remove_circle</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex items-center justify-between">
+                                <label class="text-sm font-medium text-gray-400">Exclude</label>
+                                <button type="button" @onclick="AddExcludePattern"
+                                        class="flex h-8 w-8 items-center justify-center rounded-md border border-[#3b3b3b] bg-[#262626] text-gray-300 hover:bg-white/5">
+                                    <span class="material-symbols-outlined text-lg">add</span>
+                                </button>
+                            </div>
+
+                            @for (var i = 0; i < _filterExcludePatterns.Count; i++)
+                            {
+                                <div class="flex items-center gap-2">
+                                    <input value="@_filterExcludePatterns[i]"
+                                           @oninput="e => _filterExcludePatterns[i] = e.Value?.ToString() ?? string.Empty"
+                                           class="h-11 min-w-0 flex-1 rounded-lg border border-[#3b3b3b] bg-[#262626] px-4 text-white placeholder:text-gray-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors font-mono text-sm"
+                                           placeholder="e.g., healthcheck" />
+                                    <button type="button" @onclick="() => RemoveExcludePattern(i)"
+                                            class="flex h-11 w-11 items-center justify-center rounded-lg border border-[#3b3b3b] bg-[#262626] text-gray-300 hover:bg-white/5">
+                                        <span class="material-symbols-outlined text-xl">remove_circle</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <div class="flex flex-col">
+                                <span class="text-sm text-white">Ignore Case</span>
+                                <span class="text-xs text-gray-500">Case-insensitive match</span>
+                            </div>
+                            <button @onclick="() => _filterIgnoreCase = !_filterIgnoreCase"
+                                    class="relative h-5 w-9 rounded-full transition-colors @(_filterIgnoreCase ? "bg-primary" : "bg-[#3b3b3b]")">
+                                <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform @(_filterIgnoreCase ? "left-4" : "left-0.5")"></span>
+                            </button>
+                        </div>
+
+                        <div class="flex items-center justify-between border-t border-[#3b3b3b] pt-2 mt-1">
+                            <div class="flex flex-col">
+                                <span class="text-sm text-white">Invert Match</span>
+                                <span class="text-xs text-gray-500">Equivalent to grep -v (include)</span>
+                            </div>
+                            <button @onclick="() => _filterInvertMatch = !_filterInvertMatch"
+                                    class="relative h-5 w-9 rounded-full transition-colors @(_filterInvertMatch ? "bg-primary" : "bg-[#3b3b3b]")">
+                                <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform @(_filterInvertMatch ? "left-4" : "left-0.5")"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                @* Error Message *@
+                @if (!string.IsNullOrEmpty(_addTaskError))
+                {
+                    <div class="flex items-center gap-2 rounded-lg bg-red-500/10 px-4 py-3 text-red-400">
+                        <span class="material-symbols-outlined text-lg">error</span>
+                        <span class="text-sm">@_addTaskError</span>
+                    </div>
+                }
+            </div>
+            
+            @* Modal Footer *@
+            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2b2b2b]">
+                <button @onclick="CloseAddTaskModal"
+                        class="h-10 px-5 rounded-lg text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white transition-colors">
+                    Cancel
+                </button>
+                <button @onclick="SaveTaskAsync"
+                        class="h-10 px-5 rounded-lg bg-primary text-sm font-medium text-white hover:bg-primary/80 transition-colors">
+                    @(_editingTaskId.HasValue ? "Save" : "Add Task")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+#nullable enable
+    [Parameter]
+    public int SessionId { get; set; }
+
+    private SshSession? CurrentSession { get; set; }
+    private ElementReference LogEntriesContainerRef;
+
+    private readonly List<LogEntry> LogEntries = new();
+    private const int MaxLogEntries = 500;
+    private string LogPath { get; set; } = "/var/log/supervisord/supervisord.log";
+    private string LogSearchTerm { get; set; } = string.Empty;
+    private string LogFilter { get; set; } = "All";
+    private string? LogStreamErrorMessage { get; set; }
+    private CancellationTokenSource _cts = new();
+
+    // Task Panel State
+    private bool IsTaskPanelMinimized { get; set; } = true;
+    private double _touchStartY;
+    private double _touchCurrentY;
+    private bool _isDragging;
+    
+    // Add Task Modal State
+    private bool _showAddTaskModal;
+    private Guid? _editingTaskId;
+    private string _newTaskName = string.Empty;
+    private string _newTaskLogPath = "/var/log/syslog";
+    private bool _autoStartTask = true;
+    private string? _addTaskError;
+    
+    // Analyzer Options
+    private bool _useDrainParser = true;
+    private bool _useTransactionAnalyzer = true;
+    private bool _useEquipmentAnalyzer = true;
+    private bool _persistLogs = true;
+
+    // Filter Options
+    private LogStreamFilterKind _filterKind = LogStreamFilterKind.FixedString;
+    private readonly List<string> _filterIncludePatterns = new() { string.Empty };
+    private readonly List<string> _filterExcludePatterns = new() { string.Empty };
+    private bool _filterIgnoreCase = true;
+    private bool _filterInvertMatch;
+
+    private void AddIncludePattern() => _filterIncludePatterns.Add(string.Empty);
+    private void AddExcludePattern() => _filterExcludePatterns.Add(string.Empty);
+
+    private void RemoveIncludePattern(int index)
+    {
+        if (index < 0 || index >= _filterIncludePatterns.Count)
+        {
+            return;
+        }
+
+        if (_filterIncludePatterns.Count == 1)
+        {
+            _filterIncludePatterns[0] = string.Empty;
+            return;
+        }
+
+        _filterIncludePatterns.RemoveAt(index);
+    }
+
+    private void RemoveExcludePattern(int index)
+    {
+        if (index < 0 || index >= _filterExcludePatterns.Count)
+        {
+            return;
+        }
+
+        if (_filterExcludePatterns.Count == 1)
+        {
+            _filterExcludePatterns[0] = string.Empty;
+            return;
+        }
+
+        _filterExcludePatterns.RemoveAt(index);
+    }
+
+    private static List<string> NormalizePatterns(IEnumerable<string> patterns)
+    {
+        return patterns
+            .Select(p => (p ?? string.Empty).Trim())
+            .Where(p => p.Length > 0)
+            .ToList();
+    }
+
+    private static readonly Regex LogLineRegex = new(@"^\[(?<timestamp>[^\]]+)\]\s*\[(?<level>[A-Z]+)\]\s*(?<message>.*)$",
+        RegexOptions.Compiled);
+    private static readonly Dictionary<string, string> LevelColorMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["INFO"] = "text-[#5BC0DE]",
+        ["WARN"] = "text-[#F0AD4E]",
+        ["ERROR"] = "text-[#E74C3C]",
+        ["CRITICAL"] = "text-[#FF5252]",
+        ["DEBUG"] = "text-[#9F9EF2]"
+    };
+
+    private IEnumerable<LogEntry> FilteredLogEntries => LogEntries
+        .Where(e => LogFilter == "All" || e.Level.Equals(LogFilter, StringComparison.OrdinalIgnoreCase))
+        .Where(e => string.IsNullOrEmpty(LogSearchTerm) || 
+                    e.Message.Contains(LogSearchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        RegisterLogStreamHandlers();
+
+        CurrentSession = SelectedSessionStore.Current;
+        if (CurrentSession == null)
+        {
+            List<SshSession> sessions = await SessionManager.GetSessionsAsync();
+            if (SessionId > 0 && SessionId <= sessions.Count)
+            {
+                CurrentSession = sessions[SessionId - 1];
+            }
+        }
+
+        // Load saved tasks from storage
+        if (CurrentSession != null)
+        {
+            await LoadSavedTasksAsync();
+        }
+
+        // Add sample log entries for demo
+        LogEntries.Add(new LogEntry("10:45:12 AM", "ERROR", "Connection to API failed: Timeout"));
+        LogEntries.Add(new LogEntry("10:44:58 AM", "WARN", "Deprecated function call - 'getUser' is deprecated"));
+        LogEntries.Add(new LogEntry("10:44:30 AM", "INFO", "Data sync complete - Processed 1,423 records"));
+        LogEntries.Add(new LogEntry("10:42:01 AM", "INFO", "Starting daily data sync..."));
+        LogEntries.Add(new LogEntry("10:41:15 AM", "CRITICAL", "Database Unreachable - Service cannot connect"));
+
+        await base.OnInitializedAsync();
+    }
+
+    private async Task LoadSavedTasksAsync()
+    {
+        if (CurrentSession == null) return;
+        
+        var sessionsWithTasks = await SessionStorage.LoadWithTasksAsync();
+        var sessionWithTasks = sessionsWithTasks.FirstOrDefault(s => 
+            s.Host == CurrentSession.Host && 
+            s.Port == CurrentSession.Port && 
+            s.Username == CurrentSession.Username);
+            
+        if (sessionWithTasks == null) return;
+        
+        foreach (var savedTask in sessionWithTasks.Tasks)
+        {
+            var normalizedSavedLogPath = NormalizeLogFilePath(savedTask.LogFilePath);
+
+            var alreadyRegistered = TaskManager.Tasks.Any(t =>
+                IsSameSession(t.Session, CurrentSession) &&
+                string.Equals(NormalizeLogFilePath(t.LogFilePath), normalizedSavedLogPath, StringComparison.OrdinalIgnoreCase));
+
+            if (alreadyRegistered)
+            {
+                continue;
+            }
+
+            var analyzerOptions = new TaskAnalyzerOptions
+            {
+                UseDrainLogParser = savedTask.UseDrainLogParser,
+                UseTransactionAnalyzer = savedTask.UseTransactionAnalyzer,
+                UseEquipmentAnalyzer = savedTask.UseEquipmentAnalyzer,
+                PersistLogs = savedTask.PersistLogs
+            };
+
+            var filterOptions = savedTask.ToFilterOptions();
+            var task = TaskFactory.CreateTask(CurrentSession, savedTask.LogFilePath, savedTask.Name, analyzerOptions, filterOptions);
+            TaskManager.AddTask(task);
+            
+            // Auto-start if configured and session is connected
+            if (savedTask.AutoStart && CurrentSession.IsConnected)
+            {
+                _ = task.StartAsync();
+            }
+        }
+    }
+
+    private static bool IsSameSession(SshSession a, SshSession b)
+    {
+        return string.Equals(a.Host, b.Host, StringComparison.OrdinalIgnoreCase)
+            && a.Port == b.Port
+            && string.Equals(a.Username, b.Username, StringComparison.Ordinal);
+    }
+
+    private static string NormalizeLogFilePath(string? path)
+    {
+        return (path ?? string.Empty).Trim();
+    }
+
+    private string GetSessionKey()
+    {
+        return CurrentSession != null 
+            ? $"{CurrentSession.Host}:{CurrentSession.Port}:{CurrentSession.Username}"
+            : string.Empty;
+    }
+
+    private void SetLogFilter(string filter)
+    {
+        LogFilter = filter;
+    }
+
+    private string GetFilterClass(string filter)
+    {
+        return filter == LogFilter
+            ? "flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-full bg-primary px-4 py-1.5 hover:bg-primary/80 transition-colors"
+            : "flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-full bg-[#1e1e1e] px-4 py-1.5 hover:bg-[#262626] transition-colors";
+    }
+
+    private string GetLevelBgClass(string level) => level.ToUpper() switch
+    {
+        "ERROR" => "bg-red-500/10",
+        "WARN" => "bg-amber-500/10",
+        "INFO" => "bg-blue-500/10",
+        "CRITICAL" => "bg-fuchsia-500/10",
+        "DEBUG" => "bg-purple-500/10",
+        _ => "bg-slate-500/10"
+    };
+
+    private string GetLevelTextClass(string level) => level.ToUpper() switch
+    {
+        "ERROR" => "text-red-400",
+        "WARN" => "text-amber-400",
+        "INFO" => "text-blue-400",
+        "CRITICAL" => "text-fuchsia-400",
+        "DEBUG" => "text-purple-400",
+        _ => "text-slate-400"
+    };
+
+    private string GetLevelIcon(string level) => level.ToUpper() switch
+    {
+        "ERROR" => "error",
+        "WARN" => "warning",
+        "INFO" => "info",
+        "CRITICAL" => "report",
+        "DEBUG" => "bug_report",
+        _ => "article"
+    };
+
+    private void RegisterLogStreamHandlers()
+    {
+        LogStreamService.LiveLogReceived += OnLogStreamReceived;
+        LogStreamService.StreamError += OnLogStreamError;
+    }
+
+    private void UnregisterLogStreamHandlers()
+    {
+        LogStreamService.LiveLogReceived -= OnLogStreamReceived;
+        LogStreamService.StreamError -= OnLogStreamError;
+    }
+
+    private void OnLogStreamReceived(object? sender, string logLine)
+    {
+        if (string.IsNullOrWhiteSpace(logLine)) return;
+        _ = AppendLogLineAsync(logLine);
+    }
+
+    private async Task AppendLogLineAsync(string logLine)
+    {
+        await InvokeAsync(async () =>
+        {
+            LogEntries.Add(ParseLogLine(logLine));
+            if (LogEntries.Count > MaxLogEntries)
+            {
+                LogEntries.RemoveAt(0);
+            }
+            StateHasChanged();
+            await Task.Yield();
+            await ScrollLogMessagesToBottom();
+        });
+    }
+
+    private async Task ScrollLogMessagesToBottom()
+    {
+        if (!string.IsNullOrEmpty(LogEntriesContainerRef.Id))
+        {
+            await JSRuntime.InvokeVoidAsync("scrollToBottom", LogEntriesContainerRef);
+        }
+    }
+
+    private void OnLogStreamError(object? sender, Exception exception)
+    {
+        LogStreamErrorMessage = exception.Message;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private LogEntry ParseLogLine(string rawLine)
+    {
+        var sanitized = rawLine.TrimEnd('\r', '\n');
+        var match = LogLineRegex.Match(sanitized);
+        if (match.Success)
+        {
+            return new LogEntry(match.Groups["timestamp"].Value, match.Groups["level"].Value, match.Groups["message"].Value);
+        }
+        return new LogEntry(string.Empty, "INFO", sanitized);
+    }
+
+    private void NavigateToTab(string tab)
+    {
+        NavigationManager.NavigateTo($"/session/{SessionId}/{tab}");
+    }
+
+    private string GetTabClass(string tab)
+    {
+        var currentPath = NavigationManager.Uri;
+        var isActive = currentPath.EndsWith($"/{tab}", StringComparison.OrdinalIgnoreCase);
+        return isActive
+            ? "flex-1 py-3 text-center text-sm font-semibold border-b-2 border-primary text-primary"
+            : "flex-1 py-3 text-center text-sm font-medium text-[#9E9E9E] border-b-2 border-transparent";
+    }
+
+    // Task Panel Methods
+    private void ToggleTaskPanel()
+    {
+        if (!_isDragging)
+        {
+            IsTaskPanelMinimized = !IsTaskPanelMinimized;
+        }
+    }
+
+    private void OnTouchStart(TouchEventArgs e)
+    {
+        if (e.Touches.Length > 0)
+        {
+            _touchStartY = e.Touches[0].ClientY;
+            _touchCurrentY = _touchStartY;
+            _isDragging = false;
+        }
+    }
+
+    private void OnTouchMove(TouchEventArgs e)
+    {
+        if (e.Touches.Length > 0)
+        {
+            _touchCurrentY = e.Touches[0].ClientY;
+            var delta = _touchCurrentY - _touchStartY;
+            if (Math.Abs(delta) > 10)
+            {
+                _isDragging = true;
+            }
+        }
+    }
+
+    private void OnTouchEnd(TouchEventArgs e)
+    {
+        var delta = _touchCurrentY - _touchStartY;
+        const double threshold = 50;
+
+        if (_isDragging)
+        {
+            if (delta > threshold)
+            {
+                IsTaskPanelMinimized = true;
+            }
+            else if (delta < -threshold)
+            {
+                IsTaskPanelMinimized = false;
+            }
+        }
+        _isDragging = false;
+    }
+    
+    // Add Task Modal Methods
+    private void OpenAddTaskModal()
+    {
+        _showAddTaskModal = true;
+        _editingTaskId = null;
+        _newTaskName = string.Empty;
+        _newTaskLogPath = "/var/log/syslog";
+        _autoStartTask = true;
+        _addTaskError = null;
+        
+        // Reset analyzer options to defaults
+        _useDrainParser = true;
+        _useTransactionAnalyzer = true;
+        _useEquipmentAnalyzer = true;
+        _persistLogs = true;
+
+        _filterKind = LogStreamFilterKind.FixedString;
+        _filterIncludePatterns.Clear();
+        _filterIncludePatterns.Add(string.Empty);
+        _filterExcludePatterns.Clear();
+        _filterExcludePatterns.Add(string.Empty);
+        _filterIgnoreCase = true;
+        _filterInvertMatch = false;
+        
+        // Expand panel when adding task
+        IsTaskPanelMinimized = false;
+    }
+    
+    private void CloseAddTaskModal()
+    {
+        _showAddTaskModal = false;
+        _addTaskError = null;
+        _editingTaskId = null;
+    }
+
+    private async Task OpenEditTaskModalAsync(Guid taskId)
+    {
+        _addTaskError = null;
+
+        var task = TaskManager.GetTask(taskId);
+        if (task == null)
+        {
+            return;
+        }
+
+        if (task.Status == StreamTaskStatus.Running || task.Status == StreamTaskStatus.Connecting)
+        {
+            _addTaskError = "Stop the task before editing";
+            return;
+        }
+
+        _editingTaskId = taskId;
+        _showAddTaskModal = true;
+
+        _newTaskName = task.Name;
+        _newTaskLogPath = task.LogFilePath;
+
+        _useDrainParser = task.AnalyzerOptions.UseDrainLogParser;
+        _useTransactionAnalyzer = task.AnalyzerOptions.UseTransactionAnalyzer;
+        _useEquipmentAnalyzer = task.AnalyzerOptions.UseEquipmentAnalyzer;
+        _persistLogs = task.AnalyzerOptions.PersistLogs;
+
+        _filterKind = task.FilterOptions?.Kind ?? LogStreamFilterKind.FixedString;
+        _filterIgnoreCase = task.FilterOptions?.IgnoreCase ?? true;
+        _filterInvertMatch = task.FilterOptions?.InvertMatch ?? false;
+
+        _filterIncludePatterns.Clear();
+        foreach (var p in LogStreamFilterPatternParser.Split(task.FilterOptions?.Include))
+        {
+            _filterIncludePatterns.Add(p);
+        }
+        if (_filterIncludePatterns.Count == 0)
+        {
+            _filterIncludePatterns.Add(string.Empty);
+        }
+
+        _filterExcludePatterns.Clear();
+        foreach (var p in LogStreamFilterPatternParser.Split(task.FilterOptions?.Exclude))
+        {
+            _filterExcludePatterns.Add(p);
+        }
+        if (_filterExcludePatterns.Count == 0)
+        {
+            _filterExcludePatterns.Add(string.Empty);
+        }
+
+        // Try to load persisted settings (AutoStart, etc.)
+        if (CurrentSession != null)
+        {
+            var sessionsWithTasks = await SessionStorage.LoadWithTasksAsync();
+            var sessionWithTasks = sessionsWithTasks.FirstOrDefault(s =>
+                s.Host == CurrentSession.Host &&
+                s.Port == CurrentSession.Port &&
+                s.Username == CurrentSession.Username);
+
+            var saved = sessionWithTasks?.Tasks.FirstOrDefault(t => string.Equals(t.Id, taskId.ToString(), StringComparison.OrdinalIgnoreCase));
+            if (saved != null)
+            {
+                _autoStartTask = saved.AutoStart;
+            }
+            else
+            {
+                _autoStartTask = false;
+            }
+        }
+        else
+        {
+            _autoStartTask = false;
+        }
+
+        IsTaskPanelMinimized = false;
+    }
+
+    private async Task SaveTaskAsync()
+    {
+        _addTaskError = null;
+        
+        // Validation
+        if (string.IsNullOrWhiteSpace(_newTaskLogPath))
+        {
+            _addTaskError = "Log file path is required";
+            return;
+        }
+        
+        if (CurrentSession == null)
+        {
+            _addTaskError = "No session available";
+            return;
+        }
+        
+        try
+        {
+            var taskName = string.IsNullOrWhiteSpace(_newTaskName) 
+                ? $"{CurrentSession.Name} - {System.IO.Path.GetFileName(_newTaskLogPath)}"
+                : _newTaskName;
+            
+            // Create analyzer options based on user selection
+            var analyzerOptions = new TaskAnalyzerOptions
+            {
+                UseDrainLogParser = _useDrainParser,
+                UseTransactionAnalyzer = _useTransactionAnalyzer,
+                UseEquipmentAnalyzer = _useEquipmentAnalyzer,
+                PersistLogs = _persistLogs
+            };
+
+            LogStreamFilterOptions? filterOptions = null;
+            var includeList = NormalizePatterns(_filterIncludePatterns);
+            var excludeList = NormalizePatterns(_filterExcludePatterns);
+            var include = string.Join("\n", includeList);
+            var exclude = string.Join("\n", excludeList);
+            if (include.Length > 0 || exclude.Length > 0)
+            {
+                if (_filterKind == LogStreamFilterKind.Regex)
+                {
+                    // Validate patterns early to surface a friendly error in the modal.
+                    var regexOptions = RegexOptions.CultureInvariant;
+                    if (_filterIgnoreCase)
+                    {
+                        regexOptions |= RegexOptions.IgnoreCase;
+                    }
+
+                    foreach (var pattern in includeList)
+                    {
+                        _ = new Regex(pattern, regexOptions, matchTimeout: TimeSpan.FromMilliseconds(100));
+                    }
+
+                    foreach (var pattern in excludeList)
+                    {
+                        _ = new Regex(pattern, regexOptions, matchTimeout: TimeSpan.FromMilliseconds(100));
+                    }
+                }
+
+                filterOptions = new LogStreamFilterOptions
+                {
+                    Include = include.Length == 0 ? null : include,
+                    Exclude = exclude.Length == 0 ? null : exclude,
+                    Kind = _filterKind,
+                    IgnoreCase = _filterIgnoreCase,
+                    InvertMatch = _filterInvertMatch
+                };
+            }
+
+            var task = TaskFactory.CreateTask(CurrentSession, _newTaskLogPath, taskName, analyzerOptions, filterOptions);
+
+            // If editing, remove the old task + persisted entry first.
+            if (_editingTaskId.HasValue)
+            {
+                var oldTask = TaskManager.GetTask(_editingTaskId.Value);
+                if (oldTask == null)
+                {
+                    _addTaskError = "Task no longer exists";
+                    return;
+                }
+
+                if (oldTask.Status == StreamTaskStatus.Running || oldTask.Status == StreamTaskStatus.Connecting)
+                {
+                    _addTaskError = "Stop the task before editing";
+                    return;
+                }
+
+                await SessionStorage.RemoveTaskFromSessionAsync(CurrentSession, _editingTaskId.Value.ToString());
+                await TaskManager.RemoveTaskAsync(_editingTaskId.Value);
+            }
+
+            TaskManager.AddTask(task);
+            
+            // Save task to storage for persistence
+            var savedTaskInfo = new SavedTaskInfo
+            {
+                Id = task.Id.ToString(),
+                Name = taskName,
+                LogFilePath = _newTaskLogPath,
+                CreatedAt = task.CreatedAt,
+                UseDrainLogParser = _useDrainParser,
+                UseTransactionAnalyzer = _useTransactionAnalyzer,
+                UseEquipmentAnalyzer = _useEquipmentAnalyzer,
+                PersistLogs = _persistLogs,
+                AutoStart = _autoStartTask,
+                FilterInclude = filterOptions?.Include,
+                FilterExclude = filterOptions?.Exclude,
+                FilterKind = filterOptions?.Kind ?? LogStreamFilterKind.FixedString,
+                FilterIgnoreCase = filterOptions?.IgnoreCase ?? true,
+                FilterInvertMatch = filterOptions?.InvertMatch ?? false
+            };
+            await SessionStorage.AddTaskToSessionAsync(CurrentSession, savedTaskInfo);
+            
+            if (_autoStartTask)
+            {
+                await task.StartAsync();
+            }
+            
+            CloseAddTaskModal();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _addTaskError = ex.Message;
+        }
+    }
+    
+    private async Task StartTaskAsync(Guid taskId)
+    {
+        await TaskManager.StartTaskAsync(taskId);
+        StateHasChanged();
+    }
+    
+    private async Task StopTaskAsync(Guid taskId)
+    {
+        await TaskManager.StopTaskAsync(taskId);
+        StateHasChanged();
+    }
+    
+    private async Task RemoveTaskAsync(Guid taskId)
+    {
+        // Remove from storage first
+        if (CurrentSession != null)
+        {
+            await SessionStorage.RemoveTaskFromSessionAsync(CurrentSession, taskId.ToString());
+        }
+        
+        await TaskManager.RemoveTaskAsync(taskId);
+        StateHasChanged();
+    }
+    
+    // Task UI Helper Methods
+    private string GetTaskItemClass(StreamTask task)
+    {
+        return task.Status switch
+        {
+            StreamTaskStatus.Running => "bg-primary/20 ring-1 ring-primary",
+            StreamTaskStatus.Error => "bg-red-500/20 ring-1 ring-red-500",
+            StreamTaskStatus.Connecting => "bg-cyan-500/20 ring-1 ring-cyan-500",
+            _ => "bg-transparent hover:bg-white/5"
+        };
+    }
+    
+    private string GetTaskStatusIcon(StreamTaskStatus status)
+    {
+        return status switch
+        {
+            StreamTaskStatus.Running => "sync",
+            StreamTaskStatus.Connecting => "pending",
+            StreamTaskStatus.Paused => "pause_circle",
+            StreamTaskStatus.Error => "error",
+            StreamTaskStatus.Completed => "check_circle",
+            StreamTaskStatus.Cancelled => "cancel",
+            _ => "schedule"
+        };
+    }
+    
+    private string GetTaskStatusIconClass(StreamTaskStatus status)
+    {
+        return status switch
+        {
+            StreamTaskStatus.Running => "text-green-400 animate-spin",
+            StreamTaskStatus.Connecting => "text-cyan-400 animate-pulse",
+            StreamTaskStatus.Paused => "text-amber-400",
+            StreamTaskStatus.Error => "text-red-400",
+            StreamTaskStatus.Completed => "text-green-400",
+            StreamTaskStatus.Cancelled => "text-gray-400",
+            _ => "text-gray-400"
+        };
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        UnregisterLogStreamHandlers();
+        return ValueTask.CompletedTask;
+    }
+
+    private sealed record LogEntry(string Timestamp, string Level, string Message);
+}

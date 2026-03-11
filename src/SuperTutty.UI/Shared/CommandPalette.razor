@@ -1,0 +1,177 @@
+@using SuperTutty.Services
+@inject IJSRuntime JSRuntime
+
+<div class="flex flex-col gap-3 bg-white/60 dark:bg-gray-900/60 backdrop-blur rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-gray-700 dark:text-gray-200">OS 선택</span>
+            <div class="inline-flex rounded-md shadow-sm" role="group">
+                <button type="button" class=@GetPlatformButtonClass(CommandPlatform.Linux) @onclick="() => ChangePlatform(CommandPlatform.Linux)">
+                    Linux
+                </button>
+                <button type="button" class=@GetPlatformButtonClass(CommandPlatform.Windows) @onclick="() => ChangePlatform(CommandPlatform.Windows)">
+                    Windows
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 min-w-[180px]">
+            <input class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white/80 dark:bg-gray-800/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                   placeholder="명령어 또는 설명 검색"
+                   @bind="_searchText"
+                   @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+        @GetGuideText()
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
+        @foreach (var preset in FilteredPresets)
+        {
+            <div class="border border-gray-200 dark:border-gray-700 rounded-md p-3 bg-white/80 dark:bg-gray-800/60 shadow-sm">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <div class="font-semibold text-gray-800 dark:text-gray-100">@preset.Name</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-300">@preset.Description</div>
+                        @if (!string.IsNullOrWhiteSpace(preset.Caution))
+                        {
+                            <div class="mt-1 text-xs text-amber-600 dark:text-amber-400">⚠️ @preset.Caution</div>
+                        }
+                        <div class="mt-2 flex items-center gap-1 group">
+                            <div class="flex-1 font-mono text-xs bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors select-all"
+                                 title="클릭하여 복사"
+                                 @onclick="() => CopyToClipboard(preset.Command)">
+                                @preset.Command
+                            </div>
+                            <button class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                    title="클립보드에 복사"
+                                    @onclick="() => CopyToClipboard(preset.Command)">
+                                @if (_copiedCommand == preset.Command)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-500">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                }
+                                else
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                                    </svg>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <button class="text-xs bg-primary text-white px-2 py-1 rounded-md hover:bg-primary/90" @onclick="() => ApplyPreset(preset, execute: false)">
+                            버퍼에 추가
+                        </button>
+                        <button class="text-xs bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
+                                @onclick="() => ApplyPreset(preset, execute: true)">
+                            즉시 실행
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public required CommandPlatform SelectedPlatform { get; set; }
+
+    [Parameter]
+    public required EventCallback<CommandPlatform> SelectedPlatformChanged { get; set; }
+
+    [Parameter]
+    public required EventCallback<string> OnBufferChanged { get; set; }
+
+    [Parameter]
+    public required EventCallback<string> OnExecute { get; set; }
+
+    [Inject]
+    public required ICommandCatalog CommandCatalog { get; set; }
+
+    private string _searchText = string.Empty;
+    private string? _copiedCommand = null;
+    private System.Threading.Timer? _copyResetTimer;
+
+    private IEnumerable<CommandPreset> FilteredPresets => CommandCatalog
+        .GetByPlatform(SelectedPlatform)
+        .Where(preset => MatchesSearch(preset));
+
+    private bool MatchesSearch(CommandPreset preset)
+    {
+        if (string.IsNullOrWhiteSpace(_searchText))
+        {
+            return true;
+        }
+
+        var term = _searchText.Trim();
+        return preset.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || preset.Description.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || preset.Command.Contains(term, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task ChangePlatform(CommandPlatform platform)
+    {
+        if (SelectedPlatform == platform)
+        {
+            return;
+        }
+
+        SelectedPlatform = platform;
+        _searchText = string.Empty;
+        await SelectedPlatformChanged.InvokeAsync(platform);
+    }
+
+    private async Task ApplyPreset(CommandPreset preset, bool execute)
+    {
+        await OnBufferChanged.InvokeAsync(preset.Command);
+        if (execute)
+        {
+            await OnExecute.InvokeAsync(preset.Command);
+        }
+    }
+
+    private string GetPlatformButtonClass(CommandPlatform platform)
+    {
+        var isActive = platform == SelectedPlatform;
+        var active = "px-3 py-2 text-sm font-semibold bg-primary text-white border border-primary first:rounded-l-md last:rounded-r-md";
+        var inactive = "px-3 py-2 text-sm font-semibold bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-l-md last:rounded-r-md";
+        return isActive ? active : inactive;
+    }
+
+    private string GetGuideText()
+    {
+        return SelectedPlatform switch
+        {
+            CommandPlatform.Windows => "PowerShell 중심의 명령어를 제공합니다. 서비스/로그 명령은 관리자 권한이 필요할 수 있습니다.",
+            _ => "리눅스 쉘 명령 세트를 제공합니다. 서비스나 포트 점검은 sudo 권한이 필요할 수 있습니다.",
+        };
+    }
+    
+    private async Task CopyToClipboard(string command)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", command);
+            _copiedCommand = command;
+            StateHasChanged();
+            
+            // 2초 후 체크 아이콘을 다시 복사 아이콘으로 변경
+            _copyResetTimer?.Dispose();
+            _copyResetTimer = new System.Threading.Timer(_ =>
+            {
+                _copiedCommand = null;
+                InvokeAsync(StateHasChanged);
+            }, null, 2000, System.Threading.Timeout.Infinite);
+        }
+        catch
+        {
+            // 클립보드 접근 실패 시 무시
+        }
+    }
+}

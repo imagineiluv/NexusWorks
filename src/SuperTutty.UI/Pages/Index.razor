@@ -1,0 +1,268 @@
+﻿@using Microsoft.JSInterop
+@using Org.BouncyCastle.Tls
+@using SuperTutty.Services
+@using SuperTutty.UI.Data
+@using SuperTutty.UI.Services
+
+@page "/"
+@inject NavigationManager NavigationManager
+@inject SessionManager SessionManager
+@inject SelectedSessionStore SelectedSessionStore
+@inject IJSRuntime JSRuntime
+@inject IRemoteShellService RemoteShellService
+
+@implements IDisposable
+
+
+<div class="flex flex-col gap-3 px-4 py-2 bg-[#121212] min-h-screen">
+
+    @foreach (var session in Sessions)
+    {
+        <div @onclick="() => NavigateToSessionAsync(session)"
+            class="flex items-center gap-4 bg-[#1e1e1e] px-4 min-h-[72px] py-3 rounded-xl hover:bg-[#262626] transition-colors cursor-pointer">
+
+            <div class="flex items-center gap-4 flex-1">
+                <div class="relative shrink-0">
+                    <div class="flex items-center justify-center rounded-lg bg-[#2D2D2D] text-[#E0E0E0] shrink-0 size-12">
+                        <span class="material-symbols-outlined text-[24px]">@session.Icon</span>
+                    </div>
+                    <div class="absolute -bottom-1 -right-1 size-4 rounded-full border-2 border-[#1E1E1E]"
+                        style="background-color: @GetStatusColor(session.Status);">
+                    </div>
+                </div>
+
+                <div class="flex flex-col justify-center overflow-hidden">
+                    <div class="flex items-center gap-2">
+                        <p class="text-white text-base font-medium leading-normal line-clamp-1 truncate">
+                            @session.Name</p>
+                        <span
+                            class="text-[11px] px-2 py-0.5 rounded-full font-semibold @GetPlatformBadgeClass(session.Session.Platform)">
+                            @GetPlatformLabel(session.Session.Platform)
+                        </span>
+                    </div>
+                    <p class="text-[#9E9E9E] text-sm font-normal leading-normal line-clamp-2 truncate">
+                        @session.Address</p>
+                </div>
+            </div>
+
+            <div class="shrink-0">
+                @* 옵션 버튼: @onclick:stopPropagation을 사용하여 항목 클릭 이벤트 전파를 막습니다. *@
+                <button @onclick:stopPropagation @onclick="() => ToggleMenu(session)"
+                    class="text-[#9E9E9E] hover:text-white flex size-7 items-center justify-center rounded-full transition-colors z-20">
+                    <span class="material-symbols-outlined text-[24px]">more_vert</span>
+                </button>
+            </div>
+
+            @* --- 세부 메뉴 팝업 --- *@
+            @if (session.IsMenuOpen)
+            {
+                <div class="absolute right-4 top-14 bg-[#2D2D2D] border border-[#3C3C3C] rounded-lg shadow-xl py-1 w-40 z-30">
+
+                    @* 설정/편집 버튼 *@
+                    <button @onclick:stopPropagation @onclick="() => HandleSettings(session)"
+                        class="flex items-center w-full px-4 py-2 text-sm text-white hover:bg-[#404040]">
+                        <span class="material-symbols-outlined text-base mr-2">settings</span>
+                        설정 정보
+                    </button>
+
+                    @* 삭제 버튼 *@
+                    <button @onclick:stopPropagation @onclick="() => HandleDelete(session)"
+                        class="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-[#404040]">
+                        <span class="material-symbols-outlined text-base mr-2">delete</span>
+                        삭제 (Delete)
+                    </button>
+                </div>
+
+                @* 메뉴 외부 클릭 시 닫기 위한 오버레이 (전체 화면 클릭 감지) *@
+                <div @onclick="() => CloseMenu(session)" class="fixed inset-0 z-20"></div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] LayoutChrome Chrome { get; set; } = default!;
+
+    private List<SessionRecord> Sessions = new();
+
+    private readonly CancellationTokenSource _pageCts = new();
+    private readonly SemaphoreSlim _statusConcurrency = new(6);
+
+    protected override Task OnInitializedAsync()
+    {
+        // Do not block the initial render on network I/O.
+        _ = InitializeInBackgroundAsync();
+        return Task.CompletedTask;
+    }
+
+    private async Task InitializeInBackgroundAsync()
+    {
+        try
+        {
+            await LoadSessionsAsync();
+            _ = RefreshSessionStatusesInBackgroundAsync(_pageCts.Token);
+        }
+        catch
+        {
+            // Keep UI responsive even if initialization fails.
+        }
+    }
+
+    private async Task LoadSessionsAsync()
+    {
+        var storedSessions = await SessionManager.GetSessionsAsync();
+        var records = new List<SessionRecord>(storedSessions.Count);
+
+        for (var i = 0; i < storedSessions.Count; i++)
+        {
+            var ssh = storedSessions[i];
+            var icon = ssh.IsWindows ? "desktop_windows" : "terminal";
+            records.Add(new SessionRecord
+            {
+                Id = i + 1,
+                Name = ssh.Name?.ToString() ?? ssh.Host,
+                Address = ssh.Host,
+                Icon = icon,
+                Status = SessionStatus.Disconnected,
+                Session = ssh
+            });
+        }
+
+        Sessions = records;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshSessionStatusesInBackgroundAsync(CancellationToken cancellationToken)
+    {
+        var snapshot = Sessions.ToArray();
+        var tasks = new List<Task>(snapshot.Length);
+
+        foreach (var record in snapshot)
+        {
+            tasks.Add(UpdateRecordStatusAsync(record, cancellationToken));
+        }
+
+        try
+        {
+            await Task.WhenAll(tasks);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on navigation/dispose.
+        }
+    }
+
+    private async Task UpdateRecordStatusAsync(SessionRecord record, CancellationToken cancellationToken)
+    {
+        await _statusConcurrency.WaitAsync(cancellationToken);
+        try
+        {
+            var status = await CheckSessionStatusAsync(record.Session, cancellationToken);
+            await InvokeAsync(() =>
+            {
+                // Record might have been removed while we were checking.
+                if (Sessions.Contains(record))
+                {
+                    record.Status = status;
+                    StateHasChanged();
+                }
+            });
+        }
+        finally
+        {
+            _statusConcurrency.Release();
+        }
+    }
+
+    private async Task<SessionStatus> CheckSessionStatusAsync(SshSession session, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var reachable = await RemoteShellService.CheckConnectionAsync(session, cancellationToken);
+            return reachable ? SessionStatus.Connected : SessionStatus.Disconnected;
+        }
+        catch
+        {
+            return SessionStatus.Error;
+        }
+    }
+
+    private string GetStatusColor(SessionStatus status)
+    {
+        return status switch
+        {
+            SessionStatus.Connected => "#2ECC71", // Green
+            SessionStatus.Disconnected => "#9E9E9E", // Grey
+            SessionStatus.Error => "#E74C3C", // Red
+            _ => "#9E9E9E",
+        };
+    }
+
+    private static string GetPlatformLabel(SessionPlatform platform)
+    {
+        return platform == SessionPlatform.Windows ? "Windows" : "Linux";
+    }
+
+    private static string GetPlatformBadgeClass(SessionPlatform platform)
+    {
+        return platform == SessionPlatform.Windows
+        ? "bg-blue-900/60 text-blue-100"
+        : "bg-emerald-900/60 text-emerald-100";
+    }
+
+    private async Task NavigateToSessionAsync(SessionRecord session)
+    {
+        var status = await CheckSessionStatusAsync(session.Session, CancellationToken.None);
+        session.Status = status;
+
+        if (status == SessionStatus.Connected)
+        {
+            SelectedSessionStore.Set(session.Session);
+
+            Chrome.IsDetailPage = true;
+            Chrome.PageTitle = "세션 정보 입력";
+            Chrome.TitleBar = @<div class="px-4 py-2 font-semibold">@session.Name</div>;
+
+            NavigationManager.NavigateTo($"/session/{session.Id}");
+        }
+        else
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "서버에 연결할 수 없습니다. 세션 정보를 확인하세요.");
+        }
+
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        try { _pageCts.Cancel(); } catch { }
+        _pageCts.Dispose();
+        _statusConcurrency.Dispose();
+    }
+
+    private void ToggleMenu(SessionRecord session)
+    {
+        Sessions.ForEach(s => s.IsMenuOpen = false);
+        session.IsMenuOpen = !session.IsMenuOpen;
+    }
+
+    private void CloseMenu(SessionRecord session)
+    {
+        session.IsMenuOpen = false;
+    }
+
+    private void HandleSettings(SessionRecord session)
+    {
+        CloseMenu(session);
+        Console.WriteLine($"[Settings] {session.Name} ({session.Id}) 설정 페이지로 이동");
+    }
+
+    private void HandleDelete(SessionRecord session)
+    {
+        CloseMenu(session);
+        Console.WriteLine($"[Delete] {session.Name} ({session.Id}) 삭제 요청");
+
+        Sessions.Remove(session);
+        StateHasChanged();
+    }
+}
