@@ -1,0 +1,5 @@
+featureFlags:
+  release: true
+  channels:
+    - stable
+    - beta

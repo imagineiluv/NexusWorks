@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NexusWorks.Guardian.Tests",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NexusWorks.Guardian.UI", "NexusWorks.Guardian.UI\NexusWorks.Guardian.UI.csproj", "{02F592CF-7E54-472B-9A78-B3EEA12C25DC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NexusWorks.Guardian.Cli", "NexusWorks.Guardian.Cli\NexusWorks.Guardian.Cli.csproj", "{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{02F592CF-7E54-472B-9A78-B3EEA12C25DC}.Release|x64.Build.0 = Release|Any CPU
 		{02F592CF-7E54-472B-9A78-B3EEA12C25DC}.Release|x86.ActiveCfg = Release|Any CPU
 		{02F592CF-7E54-472B-9A78-B3EEA12C25DC}.Release|x86.Build.0 = Release|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Debug|x64.Build.0 = Debug|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Debug|x86.Build.0 = Debug|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Release|x64.ActiveCfg = Release|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Release|x64.Build.0 = Release|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Release|x86.ActiveCfg = Release|Any CPU
+		{46CFF8AF-6B31-45B2-8F65-3BE04A8F9CCE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

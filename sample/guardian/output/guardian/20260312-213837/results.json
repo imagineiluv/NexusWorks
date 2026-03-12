@@ -1,0 +1,437 @@
+﻿{
+  "reportTitle": "Guardian Sample Dataset",
+  "request": {
+    "currentRootPath": "/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/current",
+    "patchRootPath": "/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/patch",
+    "baselinePath": "/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/baseline.xlsx"
+  },
+  "result": {
+    "startedAt": "2026-03-12T12:38:36.319093+00:00",
+    "completedAt": "2026-03-12T12:38:37.629312+00:00",
+    "items": [
+      {
+        "relativePath": "conf/app.xml",
+        "ruleId": "G-XML-APP",
+        "fileType": "Xml",
+        "compareMode": "Hash, XmlStructure",
+        "status": "Changed",
+        "severity": "High",
+        "summary": "XML structure changed at 2 path(s).",
+        "currentExists": true,
+        "patchExists": true,
+        "currentHash": "4693252513ab7e0f926fecb6224b26bfca969b6b615d7f2ac41d5a15671416f2",
+        "patchHash": "4c07d57f6286ad11829600a7fba964e265ca24e2bc4006ab92d0d815fe45eaac",
+        "jarDetail": null,
+        "xmlDetail": {
+          "changedXPaths": [
+            "/app[1]/@attributes",
+            "/app[1]/modules[1]/module[2]"
+          ],
+          "addedNodes": 1,
+          "removedNodes": 0,
+          "changedNodeCount": 1,
+          "changes": [
+            {
+              "path": "/app[1]/@attributes",
+              "changeKind": "attributes",
+              "currentValue": "enabled=true, version=1",
+              "patchValue": "enabled=true, version=2"
+            },
+            {
+              "path": "/app[1]/modules[1]/module[2]",
+              "changeKind": "added",
+              "currentValue": null,
+              "patchValue": "module [key=audit]"
+            }
+          ],
+          "isEquivalent": false
+        },
+        "yamlDetail": null,
+        "messages": [
+          "XML structure changed at 2 path(s)."
+        ]
+      },
+      {
+        "relativePath": "conf/feature-flags.yaml",
+        "ruleId": "G-YAML-FLAGS",
+        "fileType": "Yaml",
+        "compareMode": "Hash, YamlStructure",
+        "status": "Ok",
+        "severity": "Low",
+        "summary": "Raw hash differs, but normalized YAML is equivalent.",
+        "currentExists": true,
+        "patchExists": true,
+        "currentHash": "f68db16cba64b2c44df56e78e7f14bb20c6bbfe0848252ea9d9fa80540cbf091",
+        "patchHash": "aaf379d20dfad07fc0397b4872110749e110a3eb7ccd54e72cb159c0cb68c26b",
+        "jarDetail": null,
+        "xmlDetail": null,
+        "yamlDetail": {
+          "changedPaths": [],
+          "addedKeys": 0,
+          "removedKeys": 0,
+          "changedNodeCount": 0,
+          "isEquivalent": true
+        },
+        "messages": [
+          "Raw hash differs, but normalized YAML is equivalent."
+        ]
+      },
+      {
+        "relativePath": "conf/layout.xml",
+        "ruleId": "G-XML-LAYOUT",
+        "fileType": "Xml",
+        "compareMode": "Hash, XmlStructure",
+        "status": "Ok",
+        "severity": "Low",
+        "summary": "Raw hash differs, but normalized XML is equivalent.",
+        "currentExists": true,
+        "patchExists": true,
+        "currentHash": "31aca25ce1c231310598cc8fcef68ab66f41bcc1238bdc1952c088e67d5e6bcb",
+        "patchHash": "8116b3ab5be94f9a08b11d223b24433e71e2a578a8f637fc813891c030736f4d",
+        "jarDetail": null,
+        "xmlDetail": {
+          "changedXPaths": [],
+          "addedNodes": 0,
+          "removedNodes": 0,
+          "changedNodeCount": 0,
+          "changes": [],
+          "isEquivalent": true
+        },
+        "yamlDetail": null,
+        "messages": [
+          "Raw hash differs, but normalized XML is equivalent."
+        ]
+      },
+      {
+        "relativePath": "conf/required.xml",
+        "ruleId": "G-REQ-XML",
+        "fileType": "Xml",
+        "compareMode": "Hash, XmlStructure",
+        "status": "MissingRequired",
+        "severity": "Critical",
+        "summary": "Required file is missing from one or both roots.",
+        "currentExists": false,
+        "patchExists": false,
+        "currentHash": null,
+        "patchHash": null,
+        "jarDetail": null,
+        "xmlDetail": null,
+        "yamlDetail": null,
+        "messages": []
+      },
+      {
+        "relativePath": "conf/settings.yaml",
+        "ruleId": "G-YAML-SETTINGS",
+        "fileType": "Yaml",
+        "compareMode": "Hash, YamlStructure",
+        "status": "Changed",
+        "severity": "High",
+        "summary": "YAML structure changed at 2 path(s).",
+        "currentExists": true,
+        "patchExists": true,
+        "currentHash": "d0e2bcceac8e350be6658eded31a1e18e31bb76a85ca4d286fe5f3792a7a8cc2",
+        "patchHash": "9fef429f3ee5b2faab31b1af8d40c5f74db1b2001216ad692ca728cfb990c1c5",
+        "jarDetail": null,
+        "xmlDetail": null,
+        "yamlDetail": {
+          "changedPaths": [
+            "app.features[1]",
+            "app.replicas"
+          ],
+          "addedKeys": 1,
+          "removedKeys": 0,
+          "changedNodeCount": 1,
+          "isEquivalent": false
+        },
+        "messages": [
+          "YAML structure changed at 2 path(s)."
+        ]
+      },
+      {
+        "relativePath": "lib/core-guardian.jar",
+        "ruleId": "G-JAR-CORE",
+        "fileType": "Jar",
+        "compareMode": "Hash, JarEntry",
+        "status": "Changed",
+        "severity": "High",
+        "summary": "JAR entries changed: \u002B1 / -0 / \u03942.",
+        "currentExists": true,
+        "patchExists": true,
+        "currentHash": "e67d04365f41a7bc24613b12da4fa9d97d17aecbec8dc68f49770dd08b0eada7",
+        "patchHash": "65ad6c799d98fdcf6d72d4e1e6e0fb68c2a001deff5c6f7cca5f789236d9ab45",
+        "jarDetail": {
+          "addedEntries": [
+            "BOOT-INF/classes/com/nexus/guardian/PolicyRule.class"
+          ],
+          "removedEntries": [],
+          "changedEntries": [
+            "BOOT-INF/classes/com/nexus/guardian/LegacyRule.class",
+            "META-INF/MANIFEST.MF"
+          ],
+          "manifestChanged": true,
+          "addedClassCount": 1,
+          "removedClassCount": 0,
+          "changedClassCount": 1,
+          "packageSummaries": [
+            {
+              "packageName": "com.nexus.guardian",
+              "addedClassCount": 1,
+              "removedClassCount": 0,
+              "changedClassCount": 1,
+              "totalChangedCount": 2
+            }
+          ],
+          "totalDifferenceCount": 3,
+          "isEquivalent": false
+        },
+        "xmlDetail": null,
+        "yamlDetail": null,
+        "messages": [
+          "JAR entries changed: \u002B1 / -0 / \u03942."
+        ]
+      },
+      {
+        "relativePath": "notes/release.txt",
+        "ruleId": "G-TEXT-NOTES",
+        "fileType": "Auto",
+        "compareMode": "Hash",
+        "status": "Changed",
+        "severity": "Medium",
+        "summary": "Raw hash differs.",
+        "currentExists": true,
+        "patchExists": true,
+        "currentHash": "c5995e2511dc394983143c723bd7d6d7ab4611914598433eb128c8498b16743a",
+        "patchHash": "1527494143eaf253001bae9c86b5aeffd09a5cde5745e3ba0b893b986e22a7eb",
+        "jarDetail": null,
+        "xmlDetail": null,
+        "yamlDetail": null,
+        "messages": [
+          "Raw hash differs."
+        ]
+      },
+      {
+        "relativePath": "only-current.txt",
+        "ruleId": "AUTO",
+        "fileType": "Auto",
+        "compareMode": "Hash",
+        "status": "Removed",
+        "severity": "Medium",
+        "summary": "File exists only in the current root.",
+        "currentExists": true,
+        "patchExists": false,
+        "currentHash": "5dbe6af8d3a2a31f6696ebdae9e590977a19b827ec8e0a22ea1e3decf1a79b77",
+        "patchHash": null,
+        "jarDetail": null,
+        "xmlDetail": null,
+        "yamlDetail": null,
+        "messages": []
+      },
+      {
+        "relativePath": "only-patch.txt",
+        "ruleId": "AUTO",
+        "fileType": "Auto",
+        "compareMode": "Hash",
+        "status": "Added",
+        "severity": "Low",
+        "summary": "File exists only in the patch root.",
+        "currentExists": false,
+        "patchExists": true,
+        "currentHash": null,
+        "patchHash": "9bd5cac17b2800d6f22758549ce26874ea993837e0237aeac127c3eaf95b4994",
+        "jarDetail": null,
+        "xmlDetail": null,
+        "yamlDetail": null,
+        "messages": []
+      },
+      {
+        "relativePath": "same.txt",
+        "ruleId": "AUTO",
+        "fileType": "Auto",
+        "compareMode": "Hash",
+        "status": "Ok",
+        "severity": "Low",
+        "summary": "Hashes match.",
+        "currentExists": true,
+        "patchExists": true,
+        "currentHash": "a6328afc76e9db71da297ebff4b0d3e7a7eb3b01d917c05a6573fef121b6ecb6",
+        "patchHash": "a6328afc76e9db71da297ebff4b0d3e7a7eb3b01d917c05a6573fef121b6ecb6",
+        "jarDetail": null,
+        "xmlDetail": null,
+        "yamlDetail": null,
+        "messages": [
+          "Hashes match."
+        ]
+      }
+    ],
+    "performance": {
+      "totalDurationMs": 1310.2149,
+      "stages": [
+        {
+          "stageName": "Baseline Load",
+          "itemCount": 8,
+          "durationMs": 1261.1703,
+          "concurrency": 1,
+          "itemsPerSecond": 6.343314618176467
+        },
+        {
+          "stageName": "Current Inventory Scan",
+          "itemCount": 8,
+          "durationMs": 16.4097,
+          "concurrency": 8,
+          "itemsPerSecond": 487.51652985734046
+        },
+        {
+          "stageName": "Patch Inventory Scan",
+          "itemCount": 8,
+          "durationMs": 1.902,
+          "concurrency": 8,
+          "itemsPerSecond": 4206.0988433228185
+        },
+        {
+          "stageName": "Candidate Compare",
+          "itemCount": 10,
+          "durationMs": 29.7397,
+          "concurrency": 8,
+          "itemsPerSecond": 336.25087004912626
+        }
+      ],
+      "peakConcurrency": 8
+    },
+    "statusCounts": {
+      "Changed": 4,
+      "Ok": 3,
+      "MissingRequired": 1,
+      "Removed": 1,
+      "Added": 1
+    },
+    "totalDurationMs": 1310.2149,
+    "stageMetrics": [
+      {
+        "stageName": "Baseline Load",
+        "itemCount": 8,
+        "durationMs": 1261.1703,
+        "concurrency": 1,
+        "itemsPerSecond": 6.343314618176467
+      },
+      {
+        "stageName": "Current Inventory Scan",
+        "itemCount": 8,
+        "durationMs": 16.4097,
+        "concurrency": 8,
+        "itemsPerSecond": 487.51652985734046
+      },
+      {
+        "stageName": "Patch Inventory Scan",
+        "itemCount": 8,
+        "durationMs": 1.902,
+        "concurrency": 8,
+        "itemsPerSecond": 4206.0988433228185
+      },
+      {
+        "stageName": "Candidate Compare",
+        "itemCount": 10,
+        "durationMs": 29.7397,
+        "concurrency": 8,
+        "itemsPerSecond": 336.25087004912626
+      }
+    ]
+  },
+  "summary": {
+    "executionId": "14cddfbedfb9",
+    "startedAt": "2026-03-12T12:38:36.319093+00:00",
+    "completedAt": "2026-03-12T12:38:37.629312+00:00",
+    "totalFileCount": 10,
+    "statusCounts": {
+      "Added": 1,
+      "Changed": 4,
+      "MissingRequired": 1,
+      "Ok": 3,
+      "Removed": 1
+    },
+    "severityCounts": {
+      "Critical": 1,
+      "High": 3,
+      "Low": 4,
+      "Medium": 2
+    },
+    "fileTypeCounts": {
+      "Auto": 4,
+      "Jar": 1,
+      "Xml": 3,
+      "Yaml": 2
+    },
+    "performance": {
+      "totalDurationMs": 1310.2149,
+      "stages": [
+        {
+          "stageName": "Baseline Load",
+          "itemCount": 8,
+          "durationMs": 1261.1703,
+          "concurrency": 1,
+          "itemsPerSecond": 6.343314618176467
+        },
+        {
+          "stageName": "Current Inventory Scan",
+          "itemCount": 8,
+          "durationMs": 16.4097,
+          "concurrency": 8,
+          "itemsPerSecond": 487.51652985734046
+        },
+        {
+          "stageName": "Patch Inventory Scan",
+          "itemCount": 8,
+          "durationMs": 1.902,
+          "concurrency": 8,
+          "itemsPerSecond": 4206.0988433228185
+        },
+        {
+          "stageName": "Candidate Compare",
+          "itemCount": 10,
+          "durationMs": 29.7397,
+          "concurrency": 8,
+          "itemsPerSecond": 336.25087004912626
+        }
+      ],
+      "peakConcurrency": 8
+    },
+    "totalDurationMs": 1310.2149,
+    "peakConcurrency": 8,
+    "stageMetrics": [
+      {
+        "stageName": "Baseline Load",
+        "itemCount": 8,
+        "durationMs": 1261.1703,
+        "concurrency": 1,
+        "itemsPerSecond": 6.343314618176467
+      },
+      {
+        "stageName": "Current Inventory Scan",
+        "itemCount": 8,
+        "durationMs": 16.4097,
+        "concurrency": 8,
+        "itemsPerSecond": 487.51652985734046
+      },
+      {
+        "stageName": "Patch Inventory Scan",
+        "itemCount": 8,
+        "durationMs": 1.902,
+        "concurrency": 8,
+        "itemsPerSecond": 4206.0988433228185
+      },
+      {
+        "stageName": "Candidate Compare",
+        "itemCount": 10,
+        "durationMs": 29.7397,
+        "concurrency": 8,
+        "itemsPerSecond": 336.25087004912626
+      }
+    ]
+  },
+  "artifacts": {
+    "outputDirectory": "/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260312-213837",
+    "htmlReportPath": "/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260312-213837/report.html",
+    "excelReportPath": "/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260312-213837/report.xlsx",
+    "jsonResultPath": "/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260312-213837/results.json",
+    "logPath": "/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260312-213837/logs/execution.log"
+  }
+}

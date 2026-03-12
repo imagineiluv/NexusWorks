@@ -7,6 +7,7 @@ public interface IExecutionHistoryStore
 {
     IReadOnlyList<ExecutionHistoryEntry> ListRecent(string outputRootPath, int maxCount = 10);
     ExecutionReport? Load(string jsonResultPath);
+    bool Delete(string outputDirectory);
 }
 
 public sealed class FileSystemExecutionHistoryStore : IExecutionHistoryStore
@@ -53,13 +54,36 @@ public sealed class FileSystemExecutionHistoryStore : IExecutionHistoryStore
         }
     }
 
+    public bool Delete(string outputDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+
+        var fullPath = Path.GetFullPath(outputDirectory);
+        if (!Directory.Exists(fullPath))
+        {
+            return false;
+        }
+
+        var directoryInfo = new DirectoryInfo(fullPath);
+        if (!string.Equals(directoryInfo.Parent?.Name, "guardian", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Only Guardian execution directories can be deleted from history.");
+        }
+
+        Directory.Delete(fullPath, recursive: true);
+        return true;
+    }
+
     private static ExecutionHistoryEntry ToEntry(ExecutionReport report)
         => new(
             report.Summary.ExecutionId,
             report.ReportTitle,
             report.Summary.CompletedAt,
             report.Artifacts.OutputDirectory,
+            report.Artifacts.HtmlReportPath,
+            report.Artifacts.ExcelReportPath,
             report.Artifacts.JsonResultPath,
+            report.Artifacts.LogPath,
             report.Summary.StatusCounts,
             report.Summary.SeverityCounts);
 }

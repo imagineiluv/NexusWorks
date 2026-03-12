@@ -5,7 +5,10 @@ public sealed record ExecutionHistoryEntry(
     string ReportTitle,
     DateTimeOffset CompletedAt,
     string OutputDirectory,
+    string HtmlReportPath,
+    string ExcelReportPath,
     string JsonResultPath,
+    string LogPath,
     IReadOnlyDictionary<string, int> StatusCounts,
     IReadOnlyDictionary<string, int> SeverityCounts);
 

@@ -83,6 +83,18 @@ public sealed class GuardianWorkbenchService
 
             return report;
         });
+
+    public Task<bool> DeleteHistoryAsync(string outputDirectory)
+        => Task.Run(() =>
+        {
+            var deleted = _historyStore.Delete(outputDirectory);
+            if (deleted && string.Equals(LastReport?.Artifacts.OutputDirectory, outputDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                LastReport = null;
+            }
+
+            return deleted;
+        });
 }
 
 public sealed record GuardianRunRequest(

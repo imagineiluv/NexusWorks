@@ -1,0 +1,1 @@
+<app version="2" enabled="true"><name>guardian</name><modules><module key="core" /><module key="audit" /></modules></app>

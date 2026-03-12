@@ -28,12 +28,31 @@ public class ExecutionHistoryStoreTests
         history.Should().HaveCountGreaterThanOrEqualTo(2);
         history[0].ReportTitle.Should().Be("History Two");
         history.Should().Contain(entry => entry.ExecutionId == firstReport.Summary.ExecutionId);
+        history[0].HtmlReportPath.Should().EndWith("report.html");
+        history[0].ExcelReportPath.Should().EndWith("report.xlsx");
+        history[0].LogPath.Should().EndWith(Path.Combine("logs", "execution.log"));
 
         var loaded = historyStore.Load(secondReport.Artifacts.JsonResultPath);
 
         loaded.Should().NotBeNull();
         loaded!.ReportTitle.Should().Be("History Two");
         loaded.Result.Items.Should().Contain(item => item.RelativePath == "conf/settings.yaml");
+    }
+
+    [Fact]
+    public void History_store_should_delete_selected_execution_directory()
+    {
+        using var artifacts = new TestArtifactFactory();
+        var outputRoot = artifacts.CreateDirectory("output");
+
+        var report = ExecuteRun(artifacts, outputRoot, "History Delete", replicas: 4);
+        var historyStore = new FileSystemExecutionHistoryStore();
+
+        var deleted = historyStore.Delete(report.Artifacts.OutputDirectory);
+
+        deleted.Should().BeTrue();
+        Directory.Exists(report.Artifacts.OutputDirectory).Should().BeFalse();
+        historyStore.ListRecent(outputRoot).Should().NotContain(entry => entry.ExecutionId == report.Summary.ExecutionId);
     }
 
     private static ExecutionReport ExecuteRun(TestArtifactFactory artifacts, string outputRoot, string reportTitle, int replicas)

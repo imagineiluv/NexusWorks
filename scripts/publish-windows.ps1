@@ -6,7 +6,11 @@ param(
     [ValidateSet("x64", "arm64")]
     [string]$Architecture = "x64",
 
-    [string]$ArtifactsDir
+    [string]$ArtifactsDir,
+
+    [string]$DotnetExe = $env:DOTNET_EXE,
+
+    [switch]$AllowUnsupportedDotnetSdk
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,8 +23,25 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $UiDir = Join-Path $RepoRoot "src\NexusWorks.Guardian.UI"
 $ProjectFile = Join-Path $UiDir "NexusWorks.Guardian.UI.csproj"
 
-if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    throw "dotnet is required."
+if ([string]::IsNullOrWhiteSpace($DotnetExe)) {
+    $DotnetExe = "dotnet"
+}
+
+if ((Test-Path $DotnetExe) -or (Get-Command $DotnetExe -ErrorAction SilentlyContinue)) {
+    $DotnetCommand = $DotnetExe
+}
+else {
+    throw "dotnet is required. Set -DotnetExe or DOTNET_EXE if you want to use a non-default SDK path."
+}
+
+$DotnetSdkVersion = (& $DotnetCommand --version).Trim()
+
+if (-not $DotnetSdkVersion.StartsWith("8.")) {
+    if (-not $AllowUnsupportedDotnetSdk.IsPresent) {
+        throw ".NET 8 SDK is required for Windows publish. Current SDK: $DotnetSdkVersion. Select .NET 8 with global.json or PATH, set -DotnetExe or DOTNET_EXE to a local .NET 8 SDK, or pass -AllowUnsupportedDotnetSdk to bypass this guard."
+    }
+
+    Write-Warning "Using unsupported SDK $DotnetSdkVersion for a net8.0 MAUI Windows publish."
 }
 
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
@@ -48,9 +69,10 @@ try {
         npm install
     }
 
+    npm run test:hotkeys
     npm run tailwind:build
 
-    dotnet publish $ProjectFile `
+    & $DotnetCommand publish $ProjectFile `
         -f net8.0-windows10.0.19041.0 `
         -c $Configuration `
         -r $RuntimeIdentifier `

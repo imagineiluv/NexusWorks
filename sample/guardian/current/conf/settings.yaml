@@ -1,0 +1,5 @@
+app:
+  region: ap-northeast-2
+  replicas: 2
+  features:
+    - auth

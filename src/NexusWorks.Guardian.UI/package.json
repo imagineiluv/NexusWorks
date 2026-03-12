@@ -2,7 +2,8 @@
   "name": "nexusworks-guardian-ui-assets",
   "private": true,
   "scripts": {
-    "tailwind:build": "tailwindcss -c tailwind.config.cjs -i ./tailwind/input.css -o ./wwwroot/css/tailwind.css --minify"
+    "tailwind:build": "tailwindcss -c tailwind.config.cjs -i ./tailwind/input.css -o ./wwwroot/css/tailwind.css --minify",
+    "test:hotkeys": "node --test ./tests/guardian-hotkey-map.test.js"
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",

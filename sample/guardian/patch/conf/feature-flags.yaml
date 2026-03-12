@@ -1,0 +1,6 @@
+# same data, reordered keys
+featureFlags:
+  channels:
+    - stable
+    - beta
+  release: true

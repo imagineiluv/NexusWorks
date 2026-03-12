@@ -1,0 +1,12 @@
+﻿ExecutionId=14cddfbedfb9
+StartedAt=2026-03-12T12:38:36.3190930+00:00
+CompletedAt=2026-03-12T12:38:37.6293120+00:00
+TotalFileCount=10
+TotalDurationMs=1310.215
+PeakConcurrency=8
+StatusCounts=Added:1, Changed:4, MissingRequired:1, Ok:3, Removed:1
+SeverityCounts=Critical:1, High:3, Low:4, Medium:2
+StageMetrics=Baseline Load:8@1261.17ms/6.34ips/1w | Current Inventory Scan:8@16.41ms/487.52ips/8w | Patch Inventory Scan:8@1.902ms/4206.1ips/8w | Candidate Compare:10@29.74ms/336.25ips/8w
+HtmlReportPath=/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260312-213837/report.html
+ExcelReportPath=/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260312-213837/report.xlsx
+JsonResultPath=/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260312-213837/results.json

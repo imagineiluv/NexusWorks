@@ -88,4 +88,59 @@ app:
         workbook.Worksheet("SUMMARY").Cell(7, 1).GetString().Should().Be("PeakConcurrency");
         workbook.Worksheet("DETAIL").RowsUsed().Count().Should().Be(report.Result.Items.Count + 1);
     }
+
+    [Fact]
+    public void Runner_should_generate_reports_from_sample_guardian_dataset()
+    {
+        using var artifacts = new TestArtifactFactory();
+        var repositoryRoot = RepositoryRootLocator.Find();
+        var sampleRoot = Path.Combine(repositoryRoot, "sample", "guardian");
+        var currentRoot = Path.Combine(sampleRoot, "current");
+        var patchRoot = Path.Combine(sampleRoot, "patch");
+        var baselinePath = Path.Combine(sampleRoot, "baseline.xlsx");
+        var outputRoot = artifacts.CreateDirectory("sample-output");
+
+        var runner = new GuardianExecutionRunner(
+            new GuardianComparisonEngine(
+                new ClosedXmlBaselineReader(),
+                new BaselineValidator(),
+                new FileSystemInventoryScanner(new Sha256HashProvider()),
+                new BaselineRuleResolver(),
+                new GuardianFileComparer(new JarComparer(), new XmlComparer(), new YamlComparer(), new StatusEvaluator())),
+            new GuardianReportService(
+                new ResultAggregator(),
+                new StaticHtmlReportWriter(),
+                new ClosedXmlExcelReportWriter()));
+
+        var report = runner.ExecuteAndWriteReports(
+            new ComparisonExecutionRequest(currentRoot, patchRoot, baselinePath),
+            outputRoot,
+            "Guardian Sample Dataset");
+
+        File.Exists(report.Artifacts.HtmlReportPath).Should().BeTrue();
+        File.Exists(report.Artifacts.ExcelReportPath).Should().BeTrue();
+        File.Exists(report.Artifacts.JsonResultPath).Should().BeTrue();
+        File.Exists(report.Artifacts.LogPath).Should().BeTrue();
+
+        report.Summary.StatusCounts.GetValueOrDefault(CompareStatus.Changed.ToString(), 0).Should().BeGreaterThan(0);
+        report.Summary.StatusCounts.GetValueOrDefault(CompareStatus.MissingRequired.ToString(), 0).Should().BeGreaterThan(0);
+
+        var html = File.ReadAllText(report.Artifacts.HtmlReportPath);
+        html.Should().Contain("Guardian Sample Dataset");
+        html.Should().Contain("conf/app.xml");
+        html.Should().Contain("lib/core-guardian.jar");
+        html.Should().Contain("conf/feature-flags.yaml");
+
+        var json = File.ReadAllText(report.Artifacts.JsonResultPath);
+        json.Should().Contain("Guardian Sample Dataset");
+        json.Should().Contain("conf/required.xml");
+
+        using var workbook = new XLWorkbook(report.Artifacts.ExcelReportPath);
+        workbook.TryGetWorksheet("SUMMARY", out _).Should().BeTrue();
+        workbook.TryGetWorksheet("DETAIL", out _).Should().BeTrue();
+        workbook.TryGetWorksheet("JAR_DETAIL", out _).Should().BeTrue();
+        workbook.TryGetWorksheet("XML_DETAIL", out _).Should().BeTrue();
+        workbook.TryGetWorksheet("YAML_DETAIL", out _).Should().BeTrue();
+        workbook.Worksheet("DETAIL").RowsUsed().Count().Should().Be(report.Result.Items.Count + 1);
+    }
 }

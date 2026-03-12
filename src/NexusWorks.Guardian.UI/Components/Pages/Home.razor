@@ -1,8 +1,12 @@
 @page "/"
+@implements IDisposable
+@implements IAsyncDisposable
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.Maui.ApplicationModel
 @using Microsoft.Maui.Storage
+@using Microsoft.JSInterop
 @inject IPathSelectionService PathSelector
+@inject IJSRuntime JSRuntime
 @inject GuardianWorkbenchService Workbench
 
 <div class="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
@@ -17,7 +21,20 @@
                     </p>
                 </div>
 
-                <span class="gw-badge bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200">Phase 3 UI</span>
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                    @if (HasSampleDataset)
+                    {
+                        <button type="button" class="gw-button-secondary" @onclick="LoadSampleDatasetAsync" disabled="@_isRunning">
+                            <span class="material-symbols-outlined text-[18px]">science</span>
+                            Load sample data
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick="OpenSampleGuideAsync" disabled="@_isRunning">
+                            <span class="material-symbols-outlined text-[18px]">description</span>
+                            Open sample guide
+                        </button>
+                    }
+                    <span class="gw-badge bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200">Phase 3 UI</span>
+                </div>
             </div>
 
             <EditForm Model="_runForm" OnValidSubmit="RunCompareAsync" class="mt-6 grid gap-4">
@@ -35,6 +52,7 @@
                         <div class="flex gap-2">
                             <InputText id="currentRoot" @bind-Value="_runForm.CurrentRootPath" class="gw-input flex-1" />
                             <button type="button" class="gw-button-secondary shrink-0" @onclick='() => BrowseFolderAsync(PathField.CurrentRoot)' disabled="@_isRunning">Browse</button>
+                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.CurrentRootPath)' disabled="@(!CanOpenCurrentRoot)">Open</button>
                             <span class="gw-badge @CurrentRootBadge.BadgeClass">@CurrentRootBadge.Label</span>
                         </div>
                         <ValidationMessage For="@(() => _runForm.CurrentRootPath)" class="gw-validation" />
@@ -55,6 +73,7 @@
                         <div class="flex gap-2">
                             <InputText id="patchRoot" @bind-Value="_runForm.PatchRootPath" class="gw-input flex-1" />
                             <button type="button" class="gw-button-secondary shrink-0" @onclick='() => BrowseFolderAsync(PathField.PatchRoot)' disabled="@_isRunning">Browse</button>
+                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.PatchRootPath)' disabled="@(!CanOpenPatchRoot)">Open</button>
                             <span class="gw-badge @PatchRootBadge.BadgeClass">@PatchRootBadge.Label</span>
                         </div>
                         <ValidationMessage For="@(() => _runForm.PatchRootPath)" class="gw-validation" />
@@ -75,6 +94,7 @@
                         <div class="flex gap-2">
                             <InputText id="baselinePath" @bind-Value="_runForm.BaselinePath" @bind-Value:after="OnBaselinePathChangedAsync" class="gw-input flex-1" />
                             <button type="button" class="gw-button-secondary shrink-0" @onclick="BrowseBaselineAsync" disabled="@_isRunning">Browse</button>
+                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.BaselinePath)' disabled="@(!CanOpenBaselinePath)">Open</button>
                             <span class="gw-badge @BaselinePathBadge.BadgeClass">@BaselinePathBadge.Label</span>
                         </div>
                         <ValidationMessage For="@(() => _runForm.BaselinePath)" class="gw-validation" />
@@ -95,6 +115,7 @@
                         <div class="flex gap-2">
                             <InputText id="outputRoot" @bind-Value="_runForm.OutputRootPath" @bind-Value:after="OnOutputRootChangedAsync" class="gw-input flex-1" />
                             <button type="button" class="gw-button-secondary shrink-0" @onclick='() => BrowseFolderAsync(PathField.OutputRoot)' disabled="@_isRunning">Browse</button>
+                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.OutputRootPath)' disabled="@(!CanOpenOutputRoot)">Open</button>
                             <span class="gw-badge @OutputRootBadge.BadgeClass">@OutputRootBadge.Label</span>
                         </div>
                         <ValidationMessage For="@(() => _runForm.OutputRootPath)" class="gw-validation" />
@@ -115,6 +136,21 @@
                 {
                     <div class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                         @_errorMessage
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(_noticeMessage))
+                {
+                    <div class="@($"rounded-2xl border px-4 py-3 text-sm {NoticeBannerClass}")">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-start gap-2">
+                                <span class="material-symbols-outlined text-[18px]">@NoticeIcon</span>
+                                <span>@_noticeMessage</span>
+                            </div>
+                            <button type="button" class="gw-button-secondary px-3 py-1 text-xs" @onclick="ClearNotice">
+                                Dismiss
+                            </button>
+                        </div>
                     </div>
                 }
 
@@ -162,27 +198,73 @@
                     </div>
                 }
 
+                <div class="rounded-3xl border border-slate-200 bg-white p-4">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Run Readiness</div>
+                            <div class="mt-1 text-sm text-slate-600">@RunReadiness.Description</div>
+                        </div>
+                        <span class="gw-badge @RunReadiness.BadgeClass">@RunReadiness.Label</span>
+                    </div>
+                </div>
+
                 <div class="flex flex-wrap items-center gap-3">
-                    <button type="submit" class="gw-button" disabled="@_isRunning">
+                    <button type="submit" class="gw-button" disabled="@(!CanRunCompare)">
                         <span class="material-symbols-outlined text-[18px]">play_arrow</span>
                         @(_isRunning ? "Running compare" : "Run compare")
                     </button>
-                    <button type="button" class="gw-button-secondary" @onclick="RerunAsync" disabled="@(!HasReport || _isRunning)">
+                    <button type="button" class="gw-button-secondary" @onclick="RerunAsync" disabled="@(!HasReport || !CanRunCompare)">
                         <span class="material-symbols-outlined text-[18px]">refresh</span>
                         Rerun
                     </button>
-                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.HtmlReportPath)' disabled="@(!HasReport)">
+                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.HtmlReportPath)' disabled="@(!CanOpenReportHtml)">
                         <span class="material-symbols-outlined text-[18px]">web</span>
                         Open HTML
                     </button>
-                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.ExcelReportPath)' disabled="@(!HasReport)">
+                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.ExcelReportPath)' disabled="@(!CanOpenReportExcel)">
                         <span class="material-symbols-outlined text-[18px]">table_view</span>
                         Open Excel
                     </button>
-                    <button type="button" class="gw-button-secondary" @onclick="RefreshHistoryAsync" disabled="@_isRunning">
+                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.JsonResultPath)' disabled="@(!CanOpenReportJson)">
+                        <span class="material-symbols-outlined text-[18px]">data_object</span>
+                        Open JSON
+                    </button>
+                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.LogPath)' disabled="@(!CanOpenReportLog)">
+                        <span class="material-symbols-outlined text-[18px]">article</span>
+                        Open Log
+                    </button>
+                    <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(_report?.Artifacts.OutputDirectory)' disabled="@(!CanOpenReportOutputDirectory)">
+                        <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                        Open Output
+                    </button>
+                    <button type="button" class="gw-button-secondary" @onclick="RefreshHistoryFromToolbarAsync" disabled="@_isRunning">
                         <span class="material-symbols-outlined text-[18px]">history</span>
                         Refresh history
                     </button>
+                </div>
+
+                <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <button type="button" class="gw-badge bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200" @onclick="ShowShortcutOverlay">
+                        Shortcuts
+                    </button>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Ctrl/Cmd+Enter Run</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Ctrl/Cmd+Shift+Enter Rerun</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+H History</span>
+                    @if (HasSampleDataset)
+                    {
+                        <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+S Sample</span>
+                    }
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">[ / ] History</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">M Load History</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">/ Search</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">1-5 Filters</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">J/K or N/P Navigate</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">X Toggle Row</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+A/R/C Queue</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">O / Shift+O Open File</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+O/P Bulk Open</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">H/E/D/L/U Reports</span>
+                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">? Help</span>
                 </div>
             </EditForm>
         </div>
@@ -321,17 +403,61 @@
                     <ul class="space-y-2">
                         @foreach (var entry in _history)
                         {
-                            <li class="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                            <li class="@(string.Equals(entry.ExecutionId, SelectedHistoryExecutionId, StringComparison.OrdinalIgnoreCase)
+                                    ? "rounded-2xl border border-blue-300 bg-blue-50/70 px-4 py-3 shadow-sm ring-1 ring-inset ring-blue-100"
+                                    : "rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3")"
+                                data-guardian-history-selected="@(string.Equals(entry.ExecutionId, SelectedHistoryExecutionId, StringComparison.OrdinalIgnoreCase) ? "true" : "false")"
+                                @onclick="() => SelectHistoryEntry(entry.ExecutionId)">
                                 <div class="flex flex-wrap items-start justify-between gap-3">
                                     <div>
                                         <div class="text-sm font-semibold text-slate-900">@entry.ReportTitle</div>
                                         <div class="mt-1 text-xs text-slate-500">@entry.CompletedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</div>
                                         <div class="mt-2 font-mono text-[11px] text-slate-500">@entry.ExecutionId</div>
                                     </div>
-                                    <button type="button" class="gw-button-secondary" @onclick='() => LoadHistoryAsync(entry.JsonResultPath)'>
-                                        <span class="material-symbols-outlined text-[18px]">restore_page</span>
-                                        Load
-                                    </button>
+                                    <div class="flex flex-wrap items-center justify-end gap-2">
+                                        <button type="button" class="gw-button-secondary" @onclick='() => LoadHistoryAsync(entry.JsonResultPath)'>
+                                            <span class="material-symbols-outlined text-[18px]">restore_page</span>
+                                            Load
+                                        </button>
+                                        <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(entry.HtmlReportPath)' disabled="@(!CanOpenFile(entry.HtmlReportPath))">
+                                            <span class="material-symbols-outlined text-[18px]">web</span>
+                                            HTML
+                                        </button>
+                                        <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(entry.ExcelReportPath)' disabled="@(!CanOpenFile(entry.ExcelReportPath))">
+                                            <span class="material-symbols-outlined text-[18px]">table_view</span>
+                                            Excel
+                                        </button>
+                                        <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(entry.JsonResultPath)' disabled="@(!CanOpenFile(entry.JsonResultPath))">
+                                            <span class="material-symbols-outlined text-[18px]">data_object</span>
+                                            JSON
+                                        </button>
+                                        <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(entry.LogPath)' disabled="@(!CanOpenFile(entry.LogPath))">
+                                            <span class="material-symbols-outlined text-[18px]">article</span>
+                                            Log
+                                        </button>
+                                        <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(entry.OutputDirectory)' disabled="@(!CanOpenDirectory(entry.OutputDirectory))">
+                                            <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                            Output
+                                        </button>
+                                        @if (string.Equals(_pendingDeleteExecutionId, entry.ExecutionId, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <button type="button" class="gw-button-secondary border-red-200 text-red-700" @onclick='() => DeleteHistoryAsync(entry)'>
+                                                <span class="material-symbols-outlined text-[18px]">delete_forever</span>
+                                                Confirm delete
+                                            </button>
+                                            <button type="button" class="gw-button-secondary" @onclick="CancelDeleteHistory">
+                                                <span class="material-symbols-outlined text-[18px]">close</span>
+                                                Cancel
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="gw-button-secondary" @onclick='() => ArmDeleteHistory(entry.ExecutionId)'>
+                                                <span class="material-symbols-outlined text-[18px]">delete</span>
+                                                Delete
+                                            </button>
+                                        }
+                                    </div>
                                 </div>
                                 <div class="mt-3 flex flex-wrap gap-2">
                                     @foreach (var status in entry.StatusCounts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase).Take(3))
@@ -356,13 +482,36 @@
                 </div>
 
                 <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
+                    @if (HasReport)
+                    {
+                        <button type="button" class="gw-button-secondary" @onclick="SelectAllVisibleItems" disabled="@(FilteredItems.Count == 0)">
+                            <span class="material-symbols-outlined text-[18px]">select_all</span>
+                            Select visible
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick="SelectVisibleReviewItems" disabled="@(FilteredItems.Count == 0)">
+                            <span class="material-symbols-outlined text-[18px]">rule</span>
+                            Select review set
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick='() => OpenSelectedArtifactsAsync(isCurrent: true)' disabled="@(!CanBulkOpenCurrent)">
+                            <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                            Open selected current
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick='() => OpenSelectedArtifactsAsync(isCurrent: false)' disabled="@(!CanBulkOpenPatch)">
+                            <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                            Open selected patch
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick="ClearBulkSelection" disabled="@(_bulkSelectedPaths.Count == 0)">
+                            <span class="material-symbols-outlined text-[18px]">deselect</span>
+                            Clear (@_bulkSelectedPaths.Count)
+                        </button>
+                    }
                     @foreach (var filter in Filters)
                     {
                         <button type="button" class="@(filter == _selectedFilter ? "gw-chip-active" : "gw-chip")" @onclick="() => SelectFilter(filter)">
                             @FilterLabel(filter)
                         </button>
                     }
-                    <input @bind="_searchText" @bind:event="oninput" class="gw-input w-full min-w-[220px] max-w-[320px]" placeholder="Search path, rule, status" />
+                    <input id="guardian-result-search" @bind="_searchText" @bind:event="oninput" class="gw-input w-full min-w-[220px] max-w-[320px]" placeholder="Search path, rule, status" />
                 </div>
             </div>
 
@@ -384,6 +533,7 @@
                     <table class="gw-table">
                         <thead class="sticky top-0 bg-white/95 backdrop-blur">
                             <tr class="text-left text-xs uppercase tracking-[0.2em] text-slate-400">
+                                <th class="w-12 px-3 py-3">Sel</th>
                                 <th class="px-3 py-3">Path</th>
                                 <th class="px-3 py-3">Status</th>
                                 <th class="px-3 py-3">Severity</th>
@@ -395,7 +545,15 @@
                         <tbody>
                             @foreach (var row in FilteredItems)
                             {
-                                <tr class="@(row.RelativePath == SelectedRelativePath ? "gw-row-active" : "gw-row")" @onclick="() => SelectItem(row.RelativePath)">
+                                <tr class="@(row.RelativePath == SelectedRelativePath ? "gw-row-active" : "gw-row")"
+                                    data-guardian-selected="@(row.RelativePath == SelectedRelativePath ? "true" : "false")"
+                                    @onclick="() => SelectItem(row.RelativePath)">
+                                    <td class="px-3 py-3" @onclick:stopPropagation="true">
+                                        <input type="checkbox"
+                                               class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                                               checked="@IsBulkSelected(row.RelativePath)"
+                                               @onchange="args => SetBulkSelection(row.RelativePath, args.Value as bool? ?? false)" />
+                                    </td>
                                     <td class="px-3 py-3">
                                         <div class="font-mono text-xs text-slate-900">@row.RelativePath</div>
                                     </td>
@@ -445,6 +603,35 @@
             else
             {
                 <div class="min-h-0 flex-1 space-y-5 overflow-auto p-5">
+                    <section class="space-y-3">
+                        <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                            <span class="material-symbols-outlined text-[18px] text-slate-400">folder_managed</span>
+                            Source Files
+                        </div>
+                        <div class="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 md:grid-cols-2">
+                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Current File</div>
+                                <div class="gw-code mt-2">@(SelectedCurrentArtifactPath ?? "-")</div>
+                                <div class="mt-3">
+                                    <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(SelectedCurrentArtifactPath)' disabled="@(!CanOpenSelectedCurrentArtifact)">
+                                        <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                        Open Current
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Patch File</div>
+                                <div class="gw-code mt-2">@(SelectedPatchArtifactPath ?? "-")</div>
+                                <div class="mt-3">
+                                    <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(SelectedPatchArtifactPath)' disabled="@(!CanOpenSelectedPatchArtifact)">
+                                        <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                        Open Patch
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                     <section class="space-y-3">
                         <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
                             <span class="material-symbols-outlined text-[18px] text-slate-400">rule_settings</span>
@@ -639,8 +826,47 @@
     </section>
 </div>
 
+@if (_showShortcutOverlay)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-8" @onclick="HideShortcutOverlay">
+        <section class="w-full max-w-3xl rounded-[2rem] border border-slate-200 bg-white shadow-2xl" @onclick:stopPropagation="true">
+            <div class="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Shortcut Help</div>
+                    <h3 class="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">Guardian keyboard controls</h3>
+                    <p class="mt-2 text-sm leading-6 text-slate-600">
+                        Use these shortcuts to run inspections and move faster through the review workflow. Press <span class="font-mono text-xs text-slate-700">Esc</span> to close this panel.
+                    </p>
+                </div>
+
+                <button type="button" class="gw-button-secondary" @onclick="HideShortcutOverlay">
+                    <span class="material-symbols-outlined text-[18px]">close</span>
+                    Close
+                </button>
+            </div>
+
+            <div class="grid gap-4 px-6 py-5 md:grid-cols-2">
+                @foreach (var shortcut in ShortcutEntries)
+                {
+                    <article class="rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
+                        <div class="flex flex-wrap items-center gap-2">
+                            @foreach (var key in shortcut.Keys)
+                            {
+                                <span class="rounded-xl border border-slate-200 bg-white px-3 py-1 font-mono text-xs text-slate-700 shadow-sm">@key</span>
+                            }
+                        </div>
+                        <div class="mt-4 text-base font-semibold text-slate-900">@shortcut.Title</div>
+                        <p class="mt-2 text-sm leading-6 text-slate-600">@shortcut.Description</p>
+                    </article>
+                }
+            </div>
+        </section>
+    </div>
+}
+
 @code {
     private readonly RunFormModel _runForm = new();
+    private readonly HashSet<string> _bulkSelectedPaths = new(StringComparer.OrdinalIgnoreCase);
     private ExecutionReport? _report;
     private IReadOnlyList<ExecutionHistoryEntry> _history = Array.Empty<ExecutionHistoryEntry>();
     private IReadOnlyList<string> _recentCurrentRoots = Array.Empty<string>();
@@ -648,18 +874,89 @@
     private IReadOnlyList<string> _recentBaselinePaths = Array.Empty<string>();
     private IReadOnlyList<string> _recentOutputRoots = Array.Empty<string>();
     private BaselinePreviewSummary? _baselinePreview;
+    private SampleDatasetInfo? _sampleDataset;
     private string? _baselinePreviewError;
     private string? _errorMessage;
+    private string? _noticeMessage;
+    private UiNoticeKind _noticeKind;
+    private CancellationTokenSource? _noticeAutoDismissCts;
+    private DotNetObjectReference<Home>? _hotkeyReference;
+    private bool _hotkeysRegistered;
+    private bool _showShortcutOverlay;
+    private string? _pendingDeleteExecutionId;
+    private string? SelectedHistoryExecutionId { get; set; }
     private string _searchText = string.Empty;
     private ResultFilter _selectedFilter = ResultFilter.All;
     private bool _isRunning;
     private string? SelectedRelativePath { get; set; }
 
     private bool HasReport => _report is not null;
+    private bool HasSampleDataset => _sampleDataset is not null;
+    private bool CanOpenCurrentRoot => CanOpenDirectory(_runForm.CurrentRootPath);
+    private bool CanOpenPatchRoot => CanOpenDirectory(_runForm.PatchRootPath);
+    private bool CanOpenBaselinePath => CanOpenFile(_runForm.BaselinePath);
+    private bool CanOpenOutputRoot => CanOpenDirectory(_runForm.OutputRootPath);
+    private bool CanOpenReportHtml => HasReport && CanOpenFile(_report!.Artifacts.HtmlReportPath);
+    private bool CanOpenReportExcel => HasReport && CanOpenFile(_report!.Artifacts.ExcelReportPath);
+    private bool CanOpenReportJson => HasReport && CanOpenFile(_report!.Artifacts.JsonResultPath);
+    private bool CanOpenReportLog => HasReport && CanOpenFile(_report!.Artifacts.LogPath);
+    private bool CanOpenReportOutputDirectory => HasReport && CanOpenDirectory(_report!.Artifacts.OutputDirectory);
+    private string? SelectedCurrentArtifactPath => ResolveSelectedArtifactPath(_report?.Request.CurrentRootPath, SelectedItem, isCurrent: true);
+    private string? SelectedPatchArtifactPath => ResolveSelectedArtifactPath(_report?.Request.PatchRootPath, SelectedItem, isCurrent: false);
+    private bool CanOpenSelectedCurrentArtifact => CanOpenFile(SelectedCurrentArtifactPath);
+    private bool CanOpenSelectedPatchArtifact => CanOpenFile(SelectedPatchArtifactPath);
+    private IReadOnlyList<ComparisonItemResult> BulkSelectedItems => _report?.Result.Items
+        .Where(item => _bulkSelectedPaths.Contains(item.RelativePath))
+        .ToArray() ?? Array.Empty<ComparisonItemResult>();
+    private bool CanBulkOpenCurrent => ResolveBulkArtifactPaths(isCurrent: true).Count > 0;
+    private bool CanBulkOpenPatch => ResolveBulkArtifactPaths(isCurrent: false).Count > 0;
     private PathStatusBadge CurrentRootBadge => EvaluateDirectoryBadge(_runForm.CurrentRootPath);
     private PathStatusBadge PatchRootBadge => EvaluateDirectoryBadge(_runForm.PatchRootPath);
-    private PathStatusBadge OutputRootBadge => EvaluateDirectoryBadge(_runForm.OutputRootPath);
+    private PathStatusBadge OutputRootBadge => EvaluateOutputDirectoryBadge(_runForm.OutputRootPath);
     private PathStatusBadge BaselinePathBadge => EvaluateBaselineBadge(_runForm.BaselinePath, _baselinePreviewError);
+    private bool CanRunCompare => !_isRunning
+        && !string.IsNullOrWhiteSpace(_runForm.ReportTitle)
+        && CurrentRootBadge.CanProceed
+        && PatchRootBadge.CanProceed
+        && OutputRootBadge.CanProceed
+        && BaselinePathBadge.CanProceed
+        && _baselinePreview is not null;
+    private RunReadinessStatus RunReadiness => EvaluateRunReadiness(_runForm.ReportTitle, CurrentRootBadge, PatchRootBadge, BaselinePathBadge, OutputRootBadge, _baselinePreview);
+    private string NoticeBannerClass => _noticeKind switch
+    {
+        UiNoticeKind.Success => "border-emerald-200 bg-emerald-50 text-emerald-700",
+        _ => "border-blue-200 bg-blue-50 text-blue-700",
+    };
+    private string NoticeIcon => _noticeKind switch
+    {
+        UiNoticeKind.Success => "task_alt",
+        _ => "info",
+    };
+    private static TimeSpan NoticeAutoDismissDelay => TimeSpan.FromSeconds(5);
+    private IReadOnlyList<ShortcutEntry> ShortcutEntries =>
+    [
+        new(["Ctrl/Cmd", "Enter"], "Run compare", "Starts a new compare run with the current form values when all readiness checks pass."),
+        new(["Ctrl/Cmd", "Shift", "Enter"], "Rerun last setup", "Runs the compare flow again using the current inputs after at least one execution has completed."),
+        new(["Alt", "Shift", "H"], "Refresh history", "Reloads recent execution history from the selected output root."),
+        new(["Alt", "Shift", "S"], "Load sample dataset", "Fills the form with the bundled sample dataset when it exists in the workspace."),
+        new(["[", "]"], "Move history selection", "Moves the current selection through the execution history list without using the mouse."),
+        new(["M"], "Load selected history", "Loads the currently selected execution history entry into the review console."),
+        new(["/"], "Focus search", "Moves keyboard focus to the result search box and selects the current text."),
+        new(["1", "2", "3", "4", "5"], "Switch status filters", "Applies All, Changed, Missing Required, Error, or OK filters to the result list without leaving the keyboard."),
+        new(["J", "K"], "Move selection", "Moves the current result selection down or up through the filtered comparison list."),
+        new(["N", "P"], "Alternative navigation", "Uses next and previous keys to move through filtered results without leaving the keyboard."),
+        new(["X"], "Toggle selected row", "Adds or removes the currently selected result row from the bulk-selection set."),
+        new(["Alt", "Shift", "A"], "Select visible rows", "Adds every currently visible result row to the bulk-selection set."),
+        new(["Alt", "Shift", "R"], "Select review set", "Adds all visible non-OK rows to the bulk-selection set."),
+        new(["Alt", "Shift", "C"], "Clear bulk selection", "Removes every row from the current bulk-selection set."),
+        new(["O"], "Open current file", "Opens the current-side file for the selected comparison item when a real source file exists."),
+        new(["Shift", "O"], "Open patch file", "Opens the patch-side file for the selected comparison item when a real source file exists."),
+        new(["Alt", "Shift", "O"], "Open bulk current", "Opens every current-side file in the current bulk-selection set."),
+        new(["Alt", "Shift", "P"], "Open bulk patch", "Opens every patch-side file in the current bulk-selection set."),
+        new(["H", "E", "D", "L", "U"], "Open current run artifacts", "Opens the HTML report, Excel report, JSON results, execution log, or output directory for the current run."),
+        new(["?"], "Open shortcut help", "Opens this reference panel from anywhere in the execution screen."),
+        new(["Esc"], "Close shortcut help", "Closes the shortcut panel without affecting the current run state."),
+    ];
 
     private IReadOnlyList<SummaryCard> SummaryCards =>
     [
@@ -689,9 +986,12 @@
 
     private ComparisonItemResult? SelectedItem => FilteredItems.FirstOrDefault(item => item.RelativePath == SelectedRelativePath)
         ?? FilteredItems.FirstOrDefault();
+    private ExecutionHistoryEntry? SelectedHistoryEntry => _history.FirstOrDefault(entry => string.Equals(entry.ExecutionId, SelectedHistoryExecutionId, StringComparison.OrdinalIgnoreCase))
+        ?? _history.FirstOrDefault();
 
     protected override async Task OnInitializedAsync()
     {
+        _sampleDataset = TryLocateSampleDataset();
         _report = Workbench.LastReport;
         if (_report is not null)
         {
@@ -703,9 +1003,143 @@
         await RefreshHistoryAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _hotkeyReference = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("guardianHotkeys.register", _hotkeyReference);
+            _hotkeysRegistered = true;
+        }
+        catch (JSException)
+        {
+            _hotkeyReference?.Dispose();
+            _hotkeyReference = null;
+        }
+    }
+
+    [JSInvokable]
+    public async Task HandleHotkeyAsync(string action)
+    {
+        if (_showShortcutOverlay)
+        {
+            switch (action)
+            {
+                case "toggle-shortcuts":
+                case "hide-shortcuts":
+                    HideShortcutOverlay();
+                    break;
+            }
+
+            return;
+        }
+
+        switch (action)
+        {
+            case "run":
+                await RunCompareAsync();
+                break;
+            case "rerun":
+                await HandleRerunHotkeyAsync();
+                break;
+            case "refresh-history":
+                await HandleRefreshHistoryHotkeyAsync();
+                break;
+            case "load-sample":
+                await HandleLoadSampleHotkeyAsync();
+                break;
+            case "select-history-previous":
+                await MoveHistorySelectionAsync(direction: -1);
+                break;
+            case "select-history-next":
+                await MoveHistorySelectionAsync(direction: 1);
+                break;
+            case "load-selected-history":
+                await HandleLoadSelectedHistoryHotkeyAsync();
+                break;
+            case "focus-search":
+                await FocusSearchAsync();
+                break;
+            case "select-filter-all":
+                HandleFilterHotkey(ResultFilter.All);
+                break;
+            case "select-filter-changed":
+                HandleFilterHotkey(ResultFilter.Changed);
+                break;
+            case "select-filter-missing-required":
+                HandleFilterHotkey(ResultFilter.MissingRequired);
+                break;
+            case "select-filter-error":
+                HandleFilterHotkey(ResultFilter.Error);
+                break;
+            case "select-filter-ok":
+                HandleFilterHotkey(ResultFilter.Ok);
+                break;
+            case "select-next":
+                await MoveSelectionAsync(direction: 1);
+                break;
+            case "select-previous":
+                await MoveSelectionAsync(direction: -1);
+                break;
+            case "toggle-selected-row":
+                HandleToggleSelectedRowHotkey();
+                break;
+            case "select-visible":
+                HandleSelectVisibleHotkey();
+                break;
+            case "select-review-set":
+                HandleSelectReviewSetHotkey();
+                break;
+            case "clear-bulk-selection":
+                HandleClearBulkSelectionHotkey();
+                break;
+            case "open-selected-current":
+                await HandleOpenSelectedArtifactHotkeyAsync(isCurrent: true);
+                break;
+            case "open-selected-patch":
+                await HandleOpenSelectedArtifactHotkeyAsync(isCurrent: false);
+                break;
+            case "open-bulk-current":
+                await HandleOpenBulkArtifactsHotkeyAsync(isCurrent: true);
+                break;
+            case "open-bulk-patch":
+                await HandleOpenBulkArtifactsHotkeyAsync(isCurrent: false);
+                break;
+            case "open-report-html":
+                await HandleOpenReportArtifactHotkeyAsync(ReportArtifactShortcut.Html);
+                break;
+            case "open-report-excel":
+                await HandleOpenReportArtifactHotkeyAsync(ReportArtifactShortcut.Excel);
+                break;
+            case "open-report-json":
+                await HandleOpenReportArtifactHotkeyAsync(ReportArtifactShortcut.Json);
+                break;
+            case "open-report-log":
+                await HandleOpenReportArtifactHotkeyAsync(ReportArtifactShortcut.Log);
+                break;
+            case "open-report-output":
+                await HandleOpenReportArtifactHotkeyAsync(ReportArtifactShortcut.OutputDirectory);
+                break;
+            case "toggle-shortcuts":
+                ShowShortcutOverlay();
+                break;
+        }
+    }
+
     private async Task RunCompareAsync()
     {
-        _errorMessage = null;
+        if (!CanRunCompare)
+        {
+            SetError(RunReadiness.Description);
+            return;
+        }
+
+        ClearMessages();
         _isRunning = true;
 
         try
@@ -721,10 +1155,11 @@
             ApplyReport(_report);
             await RefreshRecentPathsAsync();
             await RefreshHistoryAsync();
+            SetSuccessNotice($"Inspection completed. {_report.Summary.TotalFileCount} items processed in {FormatDuration(_report.Summary.TotalDurationMs)}. Execution {_report.Summary.ExecutionId} is ready.");
         }
         catch (Exception ex)
         {
-            _errorMessage = ex.Message;
+            SetError(ex.Message);
         }
         finally
         {
@@ -734,15 +1169,79 @@
 
     private Task RerunAsync() => HasReport ? RunCompareAsync() : Task.CompletedTask;
 
+    private async Task HandleRerunHotkeyAsync()
+    {
+        if (_isRunning)
+        {
+            SetInfoNotice("A compare run is already in progress.");
+            return;
+        }
+
+        if (!HasReport)
+        {
+            SetInfoNotice("Rerun is available after the first completed execution.");
+            return;
+        }
+
+        if (!CanRunCompare)
+        {
+            SetError(RunReadiness.Description);
+            return;
+        }
+
+        await RerunAsync();
+    }
+
     private async Task RefreshHistoryAsync()
     {
         if (string.IsNullOrWhiteSpace(_runForm.OutputRootPath))
         {
             _history = Array.Empty<ExecutionHistoryEntry>();
+            _pendingDeleteExecutionId = null;
+            SelectedHistoryExecutionId = null;
             return;
         }
 
         _history = await Workbench.ListRecentAsync(_runForm.OutputRootPath);
+        SyncSelectedHistoryEntry();
+        if (!string.IsNullOrWhiteSpace(_pendingDeleteExecutionId)
+            && !_history.Any(entry => string.Equals(entry.ExecutionId, _pendingDeleteExecutionId, StringComparison.OrdinalIgnoreCase)))
+        {
+            _pendingDeleteExecutionId = null;
+        }
+    }
+
+    private async Task RefreshHistoryFromToolbarAsync()
+    {
+        try
+        {
+            await RefreshHistoryAsync();
+
+            if (string.IsNullOrWhiteSpace(_runForm.OutputRootPath))
+            {
+                SetInfoNotice("Execution history is unavailable until an output root is set.");
+                return;
+            }
+
+            SetInfoNotice(_history.Count == 0
+                ? "No execution history was found in the selected output root."
+                : $"Loaded {_history.Count} recent execution {(_history.Count == 1 ? "entry" : "entries")} from history.");
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+        }
+    }
+
+    private async Task HandleRefreshHistoryHotkeyAsync()
+    {
+        if (_isRunning)
+        {
+            SetInfoNotice("Execution history cannot refresh while a compare run is in progress.");
+            return;
+        }
+
+        await RefreshHistoryFromToolbarAsync();
     }
 
     private async Task RefreshRecentPathsAsync()
@@ -782,15 +1281,207 @@
 
     private async Task LoadHistoryAsync(string jsonResultPath)
     {
-        var report = await Workbench.LoadAsync(jsonResultPath);
-        if (report is null)
+        try
         {
-            _errorMessage = "Failed to load the selected execution history entry.";
+            var report = await Workbench.LoadAsync(jsonResultPath);
+            if (report is null)
+            {
+                SetError("Failed to load the selected execution history entry.");
+                return;
+            }
+
+            _pendingDeleteExecutionId = null;
+            ApplyReport(report);
+            SelectedHistoryExecutionId = report.Summary.ExecutionId;
+            SetInfoNotice($"Loaded execution {report.Summary.ExecutionId} into the review console.");
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+        }
+    }
+
+    private void ArmDeleteHistory(string executionId)
+        => _pendingDeleteExecutionId = executionId;
+
+    private void CancelDeleteHistory()
+        => _pendingDeleteExecutionId = null;
+
+    private void SelectHistoryEntry(string executionId)
+        => SelectedHistoryExecutionId = executionId;
+
+    private async Task DeleteHistoryAsync(ExecutionHistoryEntry entry)
+    {
+        try
+        {
+            ClearError();
+
+            var deleted = await Workbench.DeleteHistoryAsync(entry.OutputDirectory);
+            if (!deleted)
+            {
+                SetError("The selected execution history entry could not be deleted.");
+                return;
+            }
+
+            if (string.Equals(_report?.Artifacts.OutputDirectory, entry.OutputDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                _report = null;
+                SelectedRelativePath = null;
+                _bulkSelectedPaths.Clear();
+            }
+
+            _pendingDeleteExecutionId = null;
+            await RefreshHistoryAsync();
+            SetSuccessNotice($"Deleted execution {entry.ExecutionId} from history.");
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+        }
+    }
+
+    private async Task LoadSampleDatasetAsync()
+    {
+        if (_sampleDataset is null)
+        {
+            SetError("Sample dataset was not found in this workspace.");
             return;
         }
 
-        _errorMessage = null;
-        ApplyReport(report);
+        ClearError();
+        _runForm.ReportTitle = "Guardian Sample Inspection";
+        _runForm.CurrentRootPath = _sampleDataset.CurrentRootPath;
+        _runForm.PatchRootPath = _sampleDataset.PatchRootPath;
+        _runForm.BaselinePath = _sampleDataset.BaselinePath;
+        _runForm.OutputRootPath = _sampleDataset.OutputRootPath;
+
+        await Workbench.RememberPathAsync(RecentPathKind.CurrentRoot, _sampleDataset.CurrentRootPath);
+        await Workbench.RememberPathAsync(RecentPathKind.PatchRoot, _sampleDataset.PatchRootPath);
+        await Workbench.RememberPathAsync(RecentPathKind.BaselineFile, _sampleDataset.BaselinePath);
+        await Workbench.RememberPathAsync(RecentPathKind.OutputRoot, _sampleDataset.OutputRootPath);
+
+        await RefreshRecentPathsAsync();
+        await RefreshBaselinePreviewAsync();
+        await RefreshHistoryAsync();
+        SetInfoNotice("Sample dataset paths were loaded into the execution form.");
+    }
+
+    private async Task HandleLoadSampleHotkeyAsync()
+    {
+        if (_isRunning)
+        {
+            SetInfoNotice("Sample dataset paths cannot be loaded while a compare run is in progress.");
+            return;
+        }
+
+        if (!HasSampleDataset)
+        {
+            SetInfoNotice("Sample dataset is not available in this workspace.");
+            return;
+        }
+
+        await LoadSampleDatasetAsync();
+    }
+
+    private async Task FocusSearchAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("guardianHotkeys.focusResultSearch");
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    private async Task MoveHistorySelectionAsync(int direction)
+    {
+        if (_history.Count == 0)
+        {
+            SetInfoNotice("Execution history is empty.");
+            return;
+        }
+
+        var currentIndex = SelectedHistoryExecutionId is null
+            ? -1
+            : _history
+                .Select((entry, index) => new { entry.ExecutionId, index })
+                .FirstOrDefault(entry => string.Equals(entry.ExecutionId, SelectedHistoryExecutionId, StringComparison.OrdinalIgnoreCase))
+                ?.index ?? -1;
+
+        var nextIndex = direction > 0
+            ? Math.Min(currentIndex + 1, _history.Count - 1)
+            : currentIndex < 0
+                ? _history.Count - 1
+                : Math.Max(currentIndex - 1, 0);
+
+        if (currentIndex < 0 && direction > 0)
+        {
+            nextIndex = 0;
+        }
+
+        SelectedHistoryExecutionId = _history[nextIndex].ExecutionId;
+
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("guardianHotkeys.scrollSelectedHistory");
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    private async Task HandleLoadSelectedHistoryHotkeyAsync()
+    {
+        if (SelectedHistoryEntry is null)
+        {
+            SetInfoNotice("Select an execution history entry before loading it.");
+            return;
+        }
+
+        await LoadHistoryAsync(SelectedHistoryEntry.JsonResultPath);
+    }
+
+    private void ShowShortcutOverlay()
+        => _showShortcutOverlay = true;
+
+    private void HideShortcutOverlay()
+        => _showShortcutOverlay = false;
+
+    private Task OpenSampleGuideAsync()
+        => OpenFileAsync(_sampleDataset?.ReadmePath);
+
+    private async Task OpenPathAsync(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            ClearError();
+
+            if (File.Exists(path))
+            {
+                await OpenFileAsync(path);
+                return;
+            }
+
+            if (Directory.Exists(path))
+            {
+                await Launcher.Default.OpenAsync(new Uri(Path.GetFullPath(path)));
+                return;
+            }
+
+            SetError($"The selected path could not be opened because it does not exist: {path}");
+        }
+        catch (Exception ex)
+        {
+            SetError(ex.Message);
+        }
     }
 
     private async Task OpenFileAsync(string? path)
@@ -807,13 +1498,13 @@
     {
         try
         {
-            _errorMessage = null;
+            ClearError();
             var path = await PathSelector.PickBaselineFileAsync();
             await ApplyPathAsync(PathField.BaselinePath, path, rememberPath: true);
         }
         catch (Exception ex)
         {
-            _errorMessage = ex.Message;
+            SetError(ex.Message);
         }
     }
 
@@ -821,13 +1512,13 @@
     {
         try
         {
-            _errorMessage = null;
+            ClearError();
             var path = await PathSelector.PickFolderAsync("Select");
             await ApplyPathAsync(field, path, rememberPath: true);
         }
         catch (Exception ex)
         {
-            _errorMessage = ex.Message;
+            SetError(ex.Message);
         }
     }
 
@@ -883,13 +1574,307 @@
     private void SelectItem(string relativePath)
         => SelectedRelativePath = relativePath;
 
+    private void HandleFilterHotkey(ResultFilter filter)
+    {
+        if (!HasReport)
+        {
+            SetInfoNotice("Filter shortcuts are available after the first execution.");
+            return;
+        }
+
+        SelectFilter(filter);
+    }
+
+    private void HandleToggleSelectedRowHotkey()
+    {
+        if (SelectedItem is null)
+        {
+            SetInfoNotice("Select a comparison row before toggling bulk selection.");
+            return;
+        }
+
+        var shouldSelect = !_bulkSelectedPaths.Contains(SelectedItem.RelativePath);
+        SetBulkSelection(SelectedItem.RelativePath, shouldSelect);
+        SetInfoNotice(shouldSelect
+            ? $"Added {SelectedItem.RelativePath} to the bulk-selection set."
+            : $"Removed {SelectedItem.RelativePath} from the bulk-selection set.");
+    }
+
+    private async Task MoveSelectionAsync(int direction)
+    {
+        if (FilteredItems.Count == 0)
+        {
+            return;
+        }
+
+        var currentIndex = SelectedRelativePath is null
+            ? -1
+            : FilteredItems
+                .Select((item, index) => new { item.RelativePath, index })
+                .FirstOrDefault(entry => string.Equals(entry.RelativePath, SelectedRelativePath, StringComparison.OrdinalIgnoreCase))
+                ?.index ?? -1;
+
+        var nextIndex = direction > 0
+            ? Math.Min(currentIndex + 1, FilteredItems.Count - 1)
+            : currentIndex < 0
+                ? FilteredItems.Count - 1
+                : Math.Max(currentIndex - 1, 0);
+
+        if (currentIndex < 0 && direction > 0)
+        {
+            nextIndex = 0;
+        }
+
+        SelectedRelativePath = FilteredItems[nextIndex].RelativePath;
+
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("guardianHotkeys.scrollSelectedRow");
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    private async Task HandleOpenSelectedArtifactHotkeyAsync(bool isCurrent)
+    {
+        if (SelectedItem is null)
+        {
+            SetInfoNotice("Select a comparison row before opening a source file.");
+            return;
+        }
+
+        var canOpen = isCurrent ? CanOpenSelectedCurrentArtifact : CanOpenSelectedPatchArtifact;
+        var path = isCurrent ? SelectedCurrentArtifactPath : SelectedPatchArtifactPath;
+
+        if (!canOpen || string.IsNullOrWhiteSpace(path))
+        {
+            SetInfoNotice(isCurrent
+                ? "The current-side file is not available for the selected result."
+                : "The patch-side file is not available for the selected result.");
+            return;
+        }
+
+        await OpenPathAsync(path);
+        if (string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            SetInfoNotice($"Opened {(isCurrent ? "current" : "patch")} file for {SelectedItem.RelativePath}.");
+        }
+    }
+
+    private async Task HandleOpenReportArtifactHotkeyAsync(ReportArtifactShortcut artifact)
+    {
+        if (!HasReport)
+        {
+            SetInfoNotice("Run an inspection before opening report artifacts.");
+            return;
+        }
+
+        string label;
+        string? filePath;
+        string? directoryPath;
+        bool canOpen;
+
+        switch (artifact)
+        {
+            case ReportArtifactShortcut.Html:
+                label = "HTML report";
+                filePath = _report!.Artifacts.HtmlReportPath;
+                directoryPath = null;
+                canOpen = CanOpenReportHtml;
+                break;
+            case ReportArtifactShortcut.Excel:
+                label = "Excel report";
+                filePath = _report!.Artifacts.ExcelReportPath;
+                directoryPath = null;
+                canOpen = CanOpenReportExcel;
+                break;
+            case ReportArtifactShortcut.Json:
+                label = "JSON results";
+                filePath = _report!.Artifacts.JsonResultPath;
+                directoryPath = null;
+                canOpen = CanOpenReportJson;
+                break;
+            case ReportArtifactShortcut.Log:
+                label = "execution log";
+                filePath = _report!.Artifacts.LogPath;
+                directoryPath = null;
+                canOpen = CanOpenReportLog;
+                break;
+            case ReportArtifactShortcut.OutputDirectory:
+                label = "output directory";
+                filePath = null;
+                directoryPath = _report!.Artifacts.OutputDirectory;
+                canOpen = CanOpenReportOutputDirectory;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(artifact), artifact, null);
+        }
+
+        if (!canOpen)
+        {
+            SetInfoNotice($"The current run {label} is not available.");
+            return;
+        }
+
+        if (filePath is not null)
+        {
+            await OpenFileAsync(filePath);
+        }
+        else if (directoryPath is not null)
+        {
+            await OpenPathAsync(directoryPath);
+        }
+
+        if (string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            SetInfoNotice($"Opened current run {label}.");
+        }
+    }
+
+    private bool IsBulkSelected(string relativePath)
+        => _bulkSelectedPaths.Contains(relativePath);
+
+    private void SetBulkSelection(string relativePath, bool isSelected)
+    {
+        if (isSelected)
+        {
+            _bulkSelectedPaths.Add(relativePath);
+        }
+        else
+        {
+            _bulkSelectedPaths.Remove(relativePath);
+        }
+    }
+
+    private void SelectAllVisibleItems()
+    {
+        foreach (var item in FilteredItems)
+        {
+            _bulkSelectedPaths.Add(item.RelativePath);
+        }
+    }
+
+    private void HandleSelectVisibleHotkey()
+    {
+        if (FilteredItems.Count == 0)
+        {
+            SetInfoNotice("No visible results are available to select.");
+            return;
+        }
+
+        SelectAllVisibleItems();
+        SetInfoNotice($"Added {FilteredItems.Count} visible row{(FilteredItems.Count == 1 ? string.Empty : "s")} to the bulk-selection set.");
+    }
+
+    private void SelectVisibleReviewItems()
+    {
+        foreach (var item in FilteredItems.Where(static item => item.Status != CompareStatus.Ok))
+        {
+            _bulkSelectedPaths.Add(item.RelativePath);
+        }
+    }
+
+    private void HandleSelectReviewSetHotkey()
+    {
+        var reviewItems = FilteredItems.Count(static item => item.Status != CompareStatus.Ok);
+        if (reviewItems == 0)
+        {
+            SetInfoNotice("No review-set rows are available in the current filter.");
+            return;
+        }
+
+        SelectVisibleReviewItems();
+        SetInfoNotice($"Added {reviewItems} review-set row{(reviewItems == 1 ? string.Empty : "s")} to the bulk-selection set.");
+    }
+
+    private void ClearBulkSelection()
+        => _bulkSelectedPaths.Clear();
+
+    private void HandleClearBulkSelectionHotkey()
+    {
+        if (_bulkSelectedPaths.Count == 0)
+        {
+            SetInfoNotice("Bulk selection is already empty.");
+            return;
+        }
+
+        var clearedCount = _bulkSelectedPaths.Count;
+        ClearBulkSelection();
+        SetInfoNotice($"Cleared {clearedCount} bulk-selected row{(clearedCount == 1 ? string.Empty : "s")}.");
+    }
+
+    private async Task OpenSelectedArtifactsAsync(bool isCurrent)
+    {
+        var paths = ResolveBulkArtifactPaths(isCurrent);
+        if (paths.Count == 0)
+        {
+            SetError(isCurrent
+                ? "No current-side files are available for the selected rows."
+                : "No patch-side files are available for the selected rows.");
+            return;
+        }
+
+        ClearError();
+
+        foreach (var path in paths)
+        {
+            await OpenPathAsync(path);
+            if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                return;
+            }
+        }
+
+        SetInfoNotice($"Opened {paths.Count} {(isCurrent ? "current" : "patch")} file{(paths.Count == 1 ? string.Empty : "s")} from the current selection.");
+    }
+
+    private async Task HandleOpenBulkArtifactsHotkeyAsync(bool isCurrent)
+    {
+        if (_bulkSelectedPaths.Count == 0)
+        {
+            SetInfoNotice("Bulk open is available after selecting one or more rows.");
+            return;
+        }
+
+        await OpenSelectedArtifactsAsync(isCurrent);
+    }
+
     private void ApplyReport(ExecutionReport report)
     {
         _report = report;
+        _bulkSelectedPaths.Clear();
+        SelectedHistoryExecutionId = report.Summary.ExecutionId;
         SelectedRelativePath = report.Result.Items
             .OrderByDescending(GetSeverityWeight)
             .ThenBy(item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault()?.RelativePath;
+    }
+
+    private void SyncSelectedHistoryEntry()
+    {
+        if (_history.Count == 0)
+        {
+            SelectedHistoryExecutionId = null;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(SelectedHistoryExecutionId)
+            && _history.Any(entry => string.Equals(entry.ExecutionId, SelectedHistoryExecutionId, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_report?.Summary.ExecutionId)
+            && _history.Any(entry => string.Equals(entry.ExecutionId, _report.Summary.ExecutionId, StringComparison.OrdinalIgnoreCase)))
+        {
+            SelectedHistoryExecutionId = _report.Summary.ExecutionId;
+            return;
+        }
+
+        SelectedHistoryExecutionId = _history[0].ExecutionId;
     }
 
     private bool MatchesFilter(ComparisonItemResult item)
@@ -992,36 +1977,236 @@
             ? "-"
             : $"{itemsPerSecond:0.##} items/s";
 
+    private void SetInfoNotice(string message)
+    {
+        CancelNoticeAutoDismiss();
+        _errorMessage = null;
+        _noticeKind = UiNoticeKind.Info;
+        _noticeMessage = message;
+        ScheduleNoticeAutoDismiss();
+    }
+
+    private void SetSuccessNotice(string message)
+    {
+        CancelNoticeAutoDismiss();
+        _errorMessage = null;
+        _noticeKind = UiNoticeKind.Success;
+        _noticeMessage = message;
+        ScheduleNoticeAutoDismiss();
+    }
+
+    private void SetError(string message)
+    {
+        CancelNoticeAutoDismiss();
+        _noticeMessage = null;
+        _errorMessage = message;
+    }
+
+    private void ClearError()
+        => _errorMessage = null;
+
+    private void ClearNotice()
+    {
+        CancelNoticeAutoDismiss();
+        _noticeMessage = null;
+    }
+
+    private void ClearMessages()
+    {
+        CancelNoticeAutoDismiss();
+        _errorMessage = null;
+        _noticeMessage = null;
+    }
+
+    private void ScheduleNoticeAutoDismiss()
+    {
+        _noticeAutoDismissCts = new CancellationTokenSource();
+        _ = AutoDismissNoticeAsync(_noticeAutoDismissCts.Token);
+    }
+
+    private async Task AutoDismissNoticeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(NoticeAutoDismissDelay, cancellationToken);
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await InvokeAsync(() =>
+            {
+                _noticeMessage = null;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void CancelNoticeAutoDismiss()
+    {
+        _noticeAutoDismissCts?.Cancel();
+        _noticeAutoDismissCts?.Dispose();
+        _noticeAutoDismissCts = null;
+    }
+
+    public void Dispose()
+        => CancelNoticeAutoDismiss();
+
+    public async ValueTask DisposeAsync()
+    {
+        CancelNoticeAutoDismiss();
+
+        if (_hotkeysRegistered)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("guardianHotkeys.unregister");
+            }
+            catch (JSException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        _hotkeyReference?.Dispose();
+        _hotkeyReference = null;
+        _hotkeysRegistered = false;
+    }
+
+    private static SampleDatasetInfo? TryLocateSampleDataset()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var sampleRoot = Path.Combine(directory.FullName, "sample", "guardian");
+            var currentRoot = Path.Combine(sampleRoot, "current");
+            var patchRoot = Path.Combine(sampleRoot, "patch");
+            var baselinePath = Path.Combine(sampleRoot, "baseline.xlsx");
+            var outputRoot = Path.Combine(sampleRoot, "output");
+            var readmePath = Path.Combine(sampleRoot, "README.md");
+
+            if (Directory.Exists(currentRoot)
+                && Directory.Exists(patchRoot)
+                && Directory.Exists(outputRoot)
+                && File.Exists(baselinePath)
+                && File.Exists(readmePath))
+            {
+                return new SampleDatasetInfo(sampleRoot, currentRoot, patchRoot, baselinePath, outputRoot, readmePath);
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
+    }
+
+    private static bool CanOpenFile(string? path)
+        => !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+
+    private static bool CanOpenDirectory(string? path)
+        => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path);
+
+    private static string? ResolveSelectedArtifactPath(string? rootPath, ComparisonItemResult? item, bool isCurrent)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath) || item is null)
+        {
+            return null;
+        }
+
+        if (item.RelativePath.IndexOfAny(['*', '?']) >= 0)
+        {
+            return null;
+        }
+
+        if (isCurrent && !item.CurrentExists)
+        {
+            return null;
+        }
+
+        if (!isCurrent && !item.PatchExists)
+        {
+            return null;
+        }
+
+        var relativePath = item.RelativePath.Replace('/', Path.DirectorySeparatorChar);
+        return Path.GetFullPath(Path.Combine(rootPath, relativePath));
+    }
+
+    private IReadOnlyList<string> ResolveBulkArtifactPaths(bool isCurrent)
+    {
+        var rootPath = isCurrent ? _report?.Request.CurrentRootPath : _report?.Request.PatchRootPath;
+
+        return BulkSelectedItems
+            .Select(item => ResolveSelectedArtifactPath(rootPath, item, isCurrent))
+            .Where(CanOpenFile)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+    }
+
     private static PathStatusBadge EvaluateDirectoryBadge(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            return new("Enter path", "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200");
+            return new("Enter path", "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200", false);
         }
 
         if (Directory.Exists(path))
         {
-            return new("Ready", "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200");
+            return new("Ready", "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200", true);
         }
 
         if (File.Exists(path))
         {
-            return new("Not folder", "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200");
+            return new("Not folder", "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200", false);
         }
 
-        return new("Missing", "bg-red-100 text-red-700 ring-1 ring-inset ring-red-200");
+        return new("Missing", "bg-red-100 text-red-700 ring-1 ring-inset ring-red-200", false);
+    }
+
+    private static PathStatusBadge EvaluateOutputDirectoryBadge(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return new("Enter path", "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200", false);
+        }
+
+        if (Directory.Exists(path))
+        {
+            return new("Ready", "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200", true);
+        }
+
+        if (File.Exists(path))
+        {
+            return new("Not folder", "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200", false);
+        }
+
+        var parentPath = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path));
+        if (!string.IsNullOrWhiteSpace(parentPath) && Directory.Exists(parentPath))
+        {
+            return new("Will create", "bg-blue-100 text-blue-700 ring-1 ring-inset ring-blue-200", true);
+        }
+
+        return new("Missing parent", "bg-red-100 text-red-700 ring-1 ring-inset ring-red-200", false);
     }
 
     private static PathStatusBadge EvaluateBaselineBadge(string? path, string? previewError)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            return new("Enter file", "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200");
+            return new("Enter file", "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200", false);
         }
 
         if (!File.Exists(path))
         {
-            return new("Missing", "bg-red-100 text-red-700 ring-1 ring-inset ring-red-200");
+            return new("Missing", "bg-red-100 text-red-700 ring-1 ring-inset ring-red-200", false);
         }
 
         var extension = Path.GetExtension(path);
@@ -1029,19 +2214,87 @@
             && !string.Equals(extension, ".xlsm", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(extension, ".xls", StringComparison.OrdinalIgnoreCase))
         {
-            return new("Invalid type", "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200");
+            return new("Invalid type", "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200", false);
         }
 
         if (!string.IsNullOrWhiteSpace(previewError))
         {
-            return new("Invalid", "bg-red-100 text-red-700 ring-1 ring-inset ring-red-200");
+            return new("Invalid", "bg-red-100 text-red-700 ring-1 ring-inset ring-red-200", false);
         }
 
-        return new("Ready", "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200");
+        return new("Ready", "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200", true);
     }
 
     private sealed record SummaryCard(string Title, string Value, string Badge, string BadgeClass, string Note);
-    private sealed record PathStatusBadge(string Label, string BadgeClass);
+    private sealed record ShortcutEntry(IReadOnlyList<string> Keys, string Title, string Description);
+    private sealed record PathStatusBadge(string Label, string BadgeClass, bool CanProceed);
+    private sealed record RunReadinessStatus(bool IsReady, string Label, string BadgeClass, string Description);
+    private sealed record SampleDatasetInfo(string RootPath, string CurrentRootPath, string PatchRootPath, string BaselinePath, string OutputRootPath, string ReadmePath);
+    private enum UiNoticeKind
+    {
+        Info,
+        Success,
+    }
+
+    private enum ReportArtifactShortcut
+    {
+        Html,
+        Excel,
+        Json,
+        Log,
+        OutputDirectory,
+    }
+
+    private static RunReadinessStatus EvaluateRunReadiness(
+        string? reportTitle,
+        PathStatusBadge currentRoot,
+        PathStatusBadge patchRoot,
+        PathStatusBadge baseline,
+        PathStatusBadge outputRoot,
+        BaselinePreviewSummary? baselinePreview)
+    {
+        var blockers = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(reportTitle))
+        {
+            blockers.Add("report title");
+        }
+
+        if (!currentRoot.CanProceed)
+        {
+            blockers.Add("current root");
+        }
+
+        if (!patchRoot.CanProceed)
+        {
+            blockers.Add("patch root");
+        }
+
+        if (!baseline.CanProceed || baselinePreview is null)
+        {
+            blockers.Add("baseline workbook");
+        }
+
+        if (!outputRoot.CanProceed)
+        {
+            blockers.Add("output root");
+        }
+
+        if (blockers.Count == 0)
+        {
+            return new(
+                true,
+                "Ready",
+                "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+                "All required inputs passed validation. Guardian can start the compare run.");
+        }
+
+        return new(
+            false,
+            "Action needed",
+            "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200",
+            $"Fill or fix {string.Join(", ", blockers)} before starting the compare run.");
+    }
 
     private sealed class RunFormModel
     {
