@@ -1,0 +1,208 @@
+name: Guardian Release Validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/guardian-release-validation.yml'
+      - 'global.json'
+      - 'README.md'
+      - 'docs/nexusworks-guardian-design-plan.md'
+      - 'scripts/**'
+      - 'src/NexusWorks.Guardian/**'
+      - 'src/NexusWorks.Guardian.UI/**'
+      - 'src/NexusWorks.Guardian.Cli/**'
+      - 'src/NexusWorks.Guardian.Tests/**'
+      - 'sample/guardian/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/guardian-release-validation.yml'
+      - 'global.json'
+      - 'README.md'
+      - 'docs/nexusworks-guardian-design-plan.md'
+      - 'scripts/**'
+      - 'src/NexusWorks.Guardian/**'
+      - 'src/NexusWorks.Guardian.UI/**'
+      - 'src/NexusWorks.Guardian.Cli/**'
+      - 'src/NexusWorks.Guardian.Tests/**'
+      - 'sample/guardian/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guardian-release-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-release:
+    name: macOS Release Wrapper
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_BIN: dotnet
+      ARTIFACTS_DIR: ${{ github.workspace }}/artifacts/macos/ci
+      SKIP_SIGNING: '1'
+      SKIP_LAUNCH_SMOKE_TEST: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src/NexusWorks.Guardian.UI/package-lock.json
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workloads
+        run: dotnet workload install maui maccatalyst --skip-manifest-update
+
+      - name: Ensure shell scripts are executable
+        run: chmod +x ./scripts/*.sh
+
+      - name: Run macOS release wrapper
+        run: ./scripts/release-mac.sh
+
+      - name: Verify macOS release manifest
+        run: node ./scripts/verify-release-manifest.mjs --artifacts-dir ./artifacts/macos/ci
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: guardian-release-macos
+          path: artifacts/macos/ci
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-release:
+    name: Windows Release Wrapper
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      ARTIFACTS_DIR: ${{ github.workspace }}\artifacts\windows\ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src/NexusWorks.Guardian.UI/package-lock.json
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workloads
+        shell: pwsh
+        run: dotnet workload install maui --skip-manifest-update
+
+      - name: Run Windows release wrapper
+        shell: pwsh
+        run: ./scripts/release-windows.ps1 -ArtifactsDir $env:ARTIFACTS_DIR
+
+      - name: Verify Windows release manifest
+        shell: pwsh
+        run: node .\scripts\verify-release-manifest.mjs --artifacts-dir .\artifacts\windows\ci
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: guardian-release-windows
+          path: artifacts/windows/ci
+          if-no-files-found: error
+          retention-days: 14
+
+  macos-signed-release:
+    name: macOS Signed Release Wrapper
+    runs-on: macos-14
+    timeout-minutes: 90
+    if: ${{ github.event_name != 'pull_request' && secrets.MACOS_CERTIFICATES_P12_BASE64 != '' && secrets.MACOS_CERTIFICATES_P12_PASSWORD != '' && secrets.MACOS_KEYCHAIN_PASSWORD != '' && secrets.NOTARY_APPLE_ID != '' && secrets.NOTARY_TEAM_ID != '' && secrets.NOTARY_APP_PASSWORD != '' && secrets.APP_SIGN_IDENTITY != '' }}
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_BIN: dotnet
+      ARTIFACTS_DIR: ${{ github.workspace }}/artifacts/macos/signed-ci
+      SKIP_LAUNCH_SMOKE_TEST: '1'
+      CODESIGN_KEYCHAIN: ${{ runner.temp }}/nexusworks-guardian-signing.keychain-db
+      NOTARY_KEYCHAIN: ${{ runner.temp }}/nexusworks-guardian-signing.keychain-db
+      NOTARY_PROFILE: guardian-notary-ci
+      CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATES_P12_BASE64 }}
+      CERTIFICATE_P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATES_P12_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+      APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+      TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+      APP_SPECIFIC_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+      APP_SIGN_IDENTITY: ${{ secrets.APP_SIGN_IDENTITY }}
+      INSTALLER_SIGN_IDENTITY: ${{ secrets.INSTALLER_SIGN_IDENTITY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src/NexusWorks.Guardian.UI/package-lock.json
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install MAUI workloads
+        run: dotnet workload install maui maccatalyst --skip-manifest-update
+
+      - name: Ensure shell scripts are executable
+        run: chmod +x ./scripts/*.sh
+
+      - name: Import signing certificate
+        run: ./scripts/import-mac-signing-certificate.sh
+
+      - name: Setup notary profile
+        run: ./scripts/setup-mac-notary-profile.sh
+
+      - name: Validate signing prerequisites
+        run: ./scripts/check-mac-signing-prereqs.sh
+
+      - name: Run signed macOS release wrapper
+        run: ./scripts/release-mac.sh
+
+      - name: Verify signed macOS release manifest
+        run: |
+          node ./scripts/verify-release-manifest.mjs --artifacts-dir ./artifacts/macos/signed-ci
+          node -e "const fs=require('node:fs'); const manifest=JSON.parse(fs.readFileSync('./artifacts/macos/signed-ci/manifest.json','utf8')); if (manifest.metadata.signed !== 'true' || manifest.metadata.notarized !== 'true') { throw new Error('Expected signed/notarized manifest metadata.'); }"
+
+      - name: Upload signed macOS artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: guardian-release-macos-signed
+          path: artifacts/macos/signed-ci
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Cleanup temporary keychain
+        if: always()
+        run: security delete-keychain "$CODESIGN_KEYCHAIN" || true
