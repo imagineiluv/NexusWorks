@@ -14,4 +14,15 @@ internal static class GuardianPerformanceTuning
         var processorBoundCount = Math.Min(Environment.ProcessorCount, MaxWorkerCount);
         return Math.Min(itemCount, Math.Max(2, processorBoundCount));
     }
+
+    public static int GetWorkerCount(int itemCount, int? maxConcurrencyOverride)
+    {
+        var baseCount = GetWorkerCount(itemCount);
+        if (maxConcurrencyOverride is > 0)
+        {
+            return Math.Min(baseCount, maxConcurrencyOverride.Value);
+        }
+
+        return baseCount;
+    }
 }

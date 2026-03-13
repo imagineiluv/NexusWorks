@@ -10,7 +10,7 @@
 
 @layer components {
   .gw-shell {
-    @apply flex min-h-screen flex-col overflow-hidden text-guardian-ink;
+    @apply flex h-full min-h-screen flex-col overflow-hidden text-guardian-ink;
   }
 
   .gw-toolbar {
@@ -30,15 +30,27 @@
   }
 
   .gw-code {
-    @apply rounded-xl bg-slate-950 px-3 py-2 font-mono text-xs text-slate-100;
+    @apply overflow-x-auto break-all rounded-xl bg-slate-950 px-3 py-2 font-mono text-xs text-slate-100;
   }
 
   .gw-table {
-    @apply min-w-full border-separate border-spacing-0 text-sm;
+    @apply w-full min-w-[960px] border-separate border-spacing-0 text-sm;
   }
 
   .gw-input {
     @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100;
+  }
+
+  .gw-field-row {
+    @apply flex flex-col gap-2 sm:flex-row sm:items-start;
+  }
+
+  .gw-field-input {
+    @apply min-w-0 flex-1;
+  }
+
+  .gw-field-actions {
+    @apply flex flex-wrap items-center gap-2;
   }
 
   .gw-label {
@@ -51,6 +63,22 @@
 
   .gw-button-secondary {
     @apply inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .gw-action-cluster {
+    @apply flex flex-wrap items-center gap-3;
+  }
+
+  .gw-toolbar-cluster {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .gw-section-toggle {
+    @apply flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-slate-300 hover:bg-slate-50;
+  }
+
+  .gw-section-heading {
+    @apply flex items-center gap-2 text-sm font-semibold text-slate-700;
   }
 
   .gw-chip {

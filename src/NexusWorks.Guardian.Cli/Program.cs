@@ -1,6 +1,7 @@
 using NexusWorks.Guardian.Baseline;
 using NexusWorks.Guardian.Comparison;
 using NexusWorks.Guardian.Evaluation;
+using NexusWorks.Guardian.Infrastructure;
 using NexusWorks.Guardian.Inventory;
 using NexusWorks.Guardian.Models;
 using NexusWorks.Guardian.Orchestration;
@@ -11,8 +12,16 @@ namespace NexusWorks.Guardian.Cli;
 
 internal static class Program
 {
-    private static int Main(string[] args)
+    private static async Task<int> Main(string[] args)
     {
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            Console.Error.WriteLine("\nCancellation requested. Shutting down gracefully...");
+            cts.Cancel();
+        };
+
         try
         {
             var options = GuardianCliOptions.Parse(args);
@@ -23,18 +32,30 @@ internal static class Program
             }
 
             var request = ResolveRequest(options);
-            var runner = CreateRunner();
+            var logger = new ConsoleGuardianLogger();
+            var runner = CreateRunner(logger);
 
-            var report = runner.ExecuteAndWriteReports(
+            var report = await Task.Run(() => runner.ExecuteAndWriteReports(
                 new ComparisonExecutionRequest(
                     request.CurrentRootPath,
                     request.PatchRootPath,
                     request.BaselinePath),
                 request.OutputRootPath,
-                request.ReportTitle);
+                request.ReportTitle,
+                cts.Token), cts.Token);
 
             PrintSummary(report);
             return 0;
+        }
+        catch (OperationCanceledException)
+        {
+            Console.Error.WriteLine("Guardian CLI was cancelled.");
+            return 130;
+        }
+        catch (TimeoutException ex)
+        {
+            Console.Error.WriteLine($"Guardian CLI timed out: {ex.Message}");
+            return 124;
         }
         catch (Exception ex)
         {
@@ -43,18 +64,24 @@ internal static class Program
         }
     }
 
-    private static GuardianExecutionRunner CreateRunner()
-        => new(
+    private static GuardianExecutionRunner CreateRunner(IGuardianLogger logger)
+    {
+        var comparer = new GuardianFileComparer(
+            new JarComparer(), new XmlComparer(), new YamlComparer(), new StatusEvaluator(), logger);
+
+        return new GuardianExecutionRunner(
             new GuardianComparisonEngine(
                 new ClosedXmlBaselineReader(),
                 new BaselineValidator(),
                 new FileSystemInventoryScanner(new Sha256HashProvider()),
                 new BaselineRuleResolver(),
-                new GuardianFileComparer(new JarComparer(), new XmlComparer(), new YamlComparer(), new StatusEvaluator())),
+                comparer,
+                logger),
             new GuardianReportService(
                 new ResultAggregator(),
                 new StaticHtmlReportWriter(),
                 new ClosedXmlExcelReportWriter()));
+    }
 
     private static GuardianCliRequest ResolveRequest(GuardianCliOptions options)
     {
@@ -125,6 +152,7 @@ internal static class Program
 
     private static void PrintSummary(ExecutionReport report)
     {
+        Console.WriteLine();
         Console.WriteLine($"Execution ID: {report.Summary.ExecutionId}");
         Console.WriteLine($"Report Title: {report.ReportTitle}");
         Console.WriteLine($"Output Directory: {report.Artifacts.OutputDirectory}");

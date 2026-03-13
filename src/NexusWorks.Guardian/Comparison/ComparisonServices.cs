@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
 using NexusWorks.Guardian.Evaluation;
+using NexusWorks.Guardian.Infrastructure;
 using NexusWorks.Guardian.Models;
 using YamlDotNet.Serialization;
 
@@ -101,14 +102,32 @@ public sealed class JarComparer : IJarComparer
             packageSummaries);
     }
 
+    /// <summary>Maximum number of entries allowed in a single JAR/ZIP archive.</summary>
+    private const int MaxZipEntryCount = 100_000;
+
+    /// <summary>Maximum uncompressed size per entry (256 MB).</summary>
+    private const long MaxUncompressedEntrySize = 256 * 1024 * 1024;
+
     private static Dictionary<string, string> ReadEntries(string jarPath)
     {
         using var fileStream = File.OpenRead(jarPath);
         using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read, leaveOpen: false);
 
+        if (archive.Entries.Count > MaxZipEntryCount)
+        {
+            throw new InvalidOperationException(
+                $"JAR archive '{Path.GetFileName(jarPath)}' contains {archive.Entries.Count} entries, exceeding the safety limit of {MaxZipEntryCount}.");
+        }
+
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrEmpty(entry.Name)))
         {
+            if (entry.Length > MaxUncompressedEntrySize)
+            {
+                throw new InvalidOperationException(
+                    $"JAR entry '{entry.FullName}' in '{Path.GetFileName(jarPath)}' has uncompressed size {entry.Length:N0} bytes, exceeding the safety limit of {MaxUncompressedEntrySize:N0} bytes.");
+            }
+
             using var entryStream = entry.Open();
             using var sha256 = SHA256.Create();
             var hash = sha256.ComputeHash(entryStream);
@@ -369,11 +388,16 @@ public sealed class XmlComparer : IXmlComparer
 
 public sealed class YamlComparer : IYamlComparer
 {
-    private readonly ThreadLocal<IDeserializer> _deserializer = new(static () => new DeserializerBuilder().Build());
+    private readonly ThreadLocal<IDeserializer> _deserializer = new(static () =>
+        new DeserializerBuilder()
+            .IgnoreUnmatchedProperties()
+            .Build());
 
     public YamlCompareDetail Compare(string currentPath, string patchPath)
     {
-        var deserializer = _deserializer.Value ?? new DeserializerBuilder().Build();
+        var deserializer = _deserializer.Value ?? new DeserializerBuilder()
+            .IgnoreUnmatchedProperties()
+            .Build();
 
         using var currentReader = File.OpenText(currentPath);
         using var patchReader = File.OpenText(patchPath);
@@ -574,13 +598,20 @@ public sealed class GuardianFileComparer : IFileComparer
     private readonly IXmlComparer _xmlComparer;
     private readonly IYamlComparer _yamlComparer;
     private readonly IStatusEvaluator _statusEvaluator;
+    private readonly IGuardianLogger _logger;
 
     public GuardianFileComparer(IJarComparer jarComparer, IXmlComparer xmlComparer, IYamlComparer yamlComparer, IStatusEvaluator statusEvaluator)
+        : this(jarComparer, xmlComparer, yamlComparer, statusEvaluator, NullGuardianLogger.Instance)
+    {
+    }
+
+    public GuardianFileComparer(IJarComparer jarComparer, IXmlComparer xmlComparer, IYamlComparer yamlComparer, IStatusEvaluator statusEvaluator, IGuardianLogger logger)
     {
         _jarComparer = jarComparer;
         _xmlComparer = xmlComparer;
         _yamlComparer = yamlComparer;
         _statusEvaluator = statusEvaluator;
+        _logger = logger;
     }
 
     public ComparisonItemResult Compare(string relativePath, ResolvedRule rule, FileInventoryEntry? current, FileInventoryEntry? patch)
@@ -668,7 +699,9 @@ public sealed class GuardianFileComparer : IFileComparer
                 rule.FileType,
                 HasError: true));
 
-            return CreateResult(relativePath, rule, current, patch, outcome.Status, outcome.Severity, ex.Message, null, null, null, new[] { ex.Message });
+            _logger.ItemError(relativePath, rule.RuleId, ex);
+            var errorDetail = $"{ex.GetType().Name}: {ex.Message}";
+            return CreateResult(relativePath, rule, current, patch, outcome.Status, outcome.Severity, errorDetail, null, null, null, new[] { errorDetail, $"StackTrace: {ex.StackTrace}" });
         }
     }
 

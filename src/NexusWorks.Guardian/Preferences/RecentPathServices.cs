@@ -88,7 +88,24 @@ public sealed class FileSystemRecentPathStore : IRecentPathStore
         };
 
     private static string NormalizePath(string path)
-        => Path.GetFullPath(path.Trim());
+    {
+        var trimmed = path.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            throw new ArgumentException("Path must not be empty or whitespace.", nameof(path));
+        }
+
+        var resolved = Path.GetFullPath(trimmed);
+
+        // Reject paths containing directory traversal sequences after resolution
+        if (trimmed.Contains("..", StringComparison.Ordinal)
+            && !Path.IsPathFullyQualified(trimmed))
+        {
+            throw new ArgumentException($"Path contains directory traversal and is not fully qualified: '{trimmed}'", nameof(path));
+        }
+
+        return resolved;
+    }
 
     private sealed class RecentPathState
     {

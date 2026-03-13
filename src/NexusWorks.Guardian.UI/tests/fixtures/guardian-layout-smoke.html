@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Guardian Layout Smoke</title>
+    <link rel="stylesheet" href="../../wwwroot/css/tailwind.css">
+    <link rel="stylesheet" href="../../wwwroot/css/app.css">
+</head>
+<body>
+    <main id="fixture-root" class="gw-home mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-5 px-4 pb-6 pt-4">
+        <section class="gw-home-pane gw-panel p-5 lg:p-6">
+            <div class="gw-home-shortcuts mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span id="shortcut-primary-1" class="gw-home-shortcut-primary gw-badge bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200">Shortcuts</span>
+                <span id="shortcut-primary-2" class="gw-home-shortcut-primary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Ctrl/Cmd+Enter Run</span>
+                <span id="shortcut-secondary-1" class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+H History</span>
+                <span id="shortcut-secondary-2" class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">H/E/D/L/U Reports</span>
+            </div>
+        </section>
+
+        <section id="workspace" class="gw-home-workspace grid min-h-[32rem] gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.95fr)]">
+            <article class="gw-home-results gw-panel flex min-h-0 flex-col overflow-hidden">
+                <div id="results-toolbar" class="gw-home-results-toolbar border-b border-slate-200 px-5 py-4">
+                    <div class="flex flex-wrap gap-3">
+                        <span class="gw-badge bg-slate-100 text-slate-700">Results</span>
+                        <span class="gw-badge bg-slate-100 text-slate-700">Filters</span>
+                        <span class="gw-badge bg-slate-100 text-slate-700">Search</span>
+                    </div>
+                </div>
+                <div id="results-scroll" class="gw-home-results-scroll flex-1 overflow-auto px-4 pb-4 pt-4">
+                    <div id="empty-state" class="gw-empty flex min-h-[14rem] flex-col items-center justify-center gap-5 rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                        <strong class="text-slate-900">No results</strong>
+                        <span class="text-sm text-slate-600">Viewport smoke test fixture</span>
+                    </div>
+                </div>
+            </article>
+
+            <aside id="inspector" class="gw-home-inspector gw-panel flex min-h-[24rem] flex-col overflow-hidden">
+                <div class="border-b border-slate-200 px-5 py-4">
+                    <h2 class="text-lg font-semibold text-slate-900">Inspector</h2>
+                </div>
+                <div class="flex-1 px-5 py-4 text-sm text-slate-600">
+                    Compact details fixture
+                </div>
+            </aside>
+        </section>
+    </main>
+</body>
+</html>

@@ -3,13 +3,16 @@
   "private": true,
   "scripts": {
     "tailwind:build": "tailwindcss -c tailwind.config.cjs -i ./tailwind/input.css -o ./wwwroot/css/tailwind.css --minify",
-    "test:hotkeys": "node --test ./tests/guardian-hotkey-map.test.js"
+    "test:hotkeys": "node --test ./tests/guardian-hotkey-map.test.js ./tests/guardian-hotkeys.test.js",
+    "test:layout": "node --test ./tests/guardian-layout-viewport.test.js",
+    "test:ui": "npm run test:hotkeys && npm run test:layout"
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",
     "@tailwindcss/forms": "^0.5.9",
     "@tailwindcss/typography": "^0.5.16",
     "autoprefixer": "^10.4.20",
+    "playwright": "^1.58.2",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17"
   }

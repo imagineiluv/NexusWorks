@@ -1,0 +1,401 @@
+<div class="@PanelClass">
+    <div class="border-b border-slate-200 px-5 py-4">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">Inspector</p>
+                <h2 class="mt-1 truncate text-xl font-semibold tracking-[-0.03em] text-slate-950">@(Item?.RelativePath ?? "Awaiting selection")</h2>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                @if (Item is not null)
+                {
+                    <span class="gw-badge @GetStatusBadgeClass(Item.Status)">@Item.Status</span>
+                }
+                @if (ShowCloseButton)
+                {
+                    <button type="button" class="gw-button-secondary" @onclick="CloseAsync">
+                        <span class="material-symbols-outlined text-[18px]">visibility_off</span>
+                        Hide
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (Item is null)
+    {
+        <div class="m-5 gw-empty">
+            <span class="material-symbols-outlined text-[28px] text-slate-400">manage_search</span>
+            <div>
+                <h3 class="text-base font-semibold text-slate-900">No item selected</h3>
+                <p class="mt-2 text-sm leading-6 text-slate-500">
+                    Select a comparison row to inspect compare mode, hashes, messages, and JAR/XML/YAML deltas.
+                </p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="min-h-0 flex-1 space-y-5 overflow-auto p-5">
+            <section class="space-y-3">
+                <button type="button" class="gw-section-toggle" @onclick='() => ToggleSection(SectionSourceFiles)'>
+                    <span class="gw-section-heading">
+                        <span class="material-symbols-outlined text-[18px] text-slate-400">folder_managed</span>
+                        Source Files
+                    </span>
+                    <span class="material-symbols-outlined text-[18px] text-slate-400">@(IsSectionOpen(SectionSourceFiles) ? "expand_less" : "expand_more")</span>
+                </button>
+
+                @if (IsSectionOpen(SectionSourceFiles))
+                {
+                    <div class="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 md:grid-cols-2">
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Current File</div>
+                            <div class="gw-code mt-2">@(CurrentArtifactPath ?? "-")</div>
+                            <div class="mt-3">
+                                <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(CurrentArtifactPath)' disabled="@(!CanOpenCurrentArtifact)">
+                                    <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                    Open Current
+                                </button>
+                            </div>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Patch File</div>
+                            <div class="gw-code mt-2">@(PatchArtifactPath ?? "-")</div>
+                            <div class="mt-3">
+                                <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(PatchArtifactPath)' disabled="@(!CanOpenPatchArtifact)">
+                                    <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                    Open Patch
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </section>
+
+            <section class="space-y-3">
+                <button type="button" class="gw-section-toggle" @onclick='() => ToggleSection(SectionRule)'>
+                    <span class="gw-section-heading">
+                        <span class="material-symbols-outlined text-[18px] text-slate-400">rule_settings</span>
+                        Applied Rule
+                    </span>
+                    <span class="material-symbols-outlined text-[18px] text-slate-400">@(IsSectionOpen(SectionRule) ? "expand_less" : "expand_more")</span>
+                </button>
+
+                @if (IsSectionOpen(SectionRule))
+                {
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                        <div class="grid gap-3 md:grid-cols-2">
+                            <div>
+                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Rule ID</div>
+                                <div class="mt-2 font-mono text-sm text-slate-900">@Item.RuleId</div>
+                            </div>
+                            <div>
+                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Compare Mode</div>
+                                <div class="mt-2 text-sm text-slate-700">@Item.CompareMode</div>
+                            </div>
+                            <div>
+                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">File Type</div>
+                                <div class="mt-2 text-sm text-slate-700">@Item.FileType</div>
+                            </div>
+                            <div>
+                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Severity</div>
+                                <div class="mt-2 text-sm text-slate-700">@Item.Severity</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </section>
+
+            <section class="space-y-3">
+                <button type="button" class="gw-section-toggle" @onclick='() => ToggleSection(SectionHash)'>
+                    <span class="gw-section-heading">
+                        <span class="material-symbols-outlined text-[18px] text-slate-400">difference</span>
+                        Hash Compare
+                    </span>
+                    <span class="material-symbols-outlined text-[18px] text-slate-400">@(IsSectionOpen(SectionHash) ? "expand_less" : "expand_more")</span>
+                </button>
+
+                @if (IsSectionOpen(SectionHash))
+                {
+                    <div class="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                        <div>
+                            <div class="mb-2 text-xs uppercase tracking-[0.18em] text-slate-400">Current</div>
+                            <div class="gw-code">@(Item.CurrentHash ?? "-")</div>
+                        </div>
+                        <div>
+                            <div class="mb-2 text-xs uppercase tracking-[0.18em] text-slate-400">Patch</div>
+                            <div class="gw-code">@(Item.PatchHash ?? "-")</div>
+                        </div>
+                    </div>
+                }
+            </section>
+
+            <section class="space-y-3">
+                <button type="button" class="gw-section-toggle" @onclick='() => ToggleSection(SectionMessages)'>
+                    <span class="gw-section-heading">
+                        <span class="material-symbols-outlined text-[18px] text-slate-400">notes</span>
+                        Messages
+                    </span>
+                    <span class="material-symbols-outlined text-[18px] text-slate-400">@(IsSectionOpen(SectionMessages) ? "expand_less" : "expand_more")</span>
+                </button>
+
+                @if (IsSectionOpen(SectionMessages))
+                {
+                    <ul class="space-y-2">
+                        @foreach (var message in Item.Messages.DefaultIfEmpty("No additional messages."))
+                        {
+                            <li class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600">@message</li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            @if (Item.JarDetail is not null)
+            {
+                <section class="space-y-3">
+                    <button type="button" class="gw-section-toggle" @onclick='() => ToggleSection(SectionJar)'>
+                        <span class="gw-section-heading">
+                            <span class="material-symbols-outlined text-[18px] text-slate-400">view_list</span>
+                            JAR Delta
+                        </span>
+                        <span class="material-symbols-outlined text-[18px] text-slate-400">@(IsSectionOpen(SectionJar) ? "expand_less" : "expand_more")</span>
+                    </button>
+
+                    @if (IsSectionOpen(SectionJar))
+                    {
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+                            <div>Manifest Changed: <span class="font-semibold text-slate-900">@Item.JarDetail.ManifestChanged</span></div>
+                            <div class="mt-2">Class Delta: <span class="font-semibold text-slate-900">+@Item.JarDetail.AddedClassCount / -@Item.JarDetail.RemovedClassCount / Δ@Item.JarDetail.ChangedClassCount</span></div>
+                            <div class="mt-3 grid gap-3 md:grid-cols-3">
+                                <div>
+                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Added</div>
+                                    <ul class="mt-2 space-y-2">
+                                        @foreach (var entry in Item.JarDetail.AddedEntries.DefaultIfEmpty("-"))
+                                        {
+                                            <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@entry</li>
+                                        }
+                                    </ul>
+                                </div>
+                                <div>
+                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Removed</div>
+                                    <ul class="mt-2 space-y-2">
+                                        @foreach (var entry in Item.JarDetail.RemovedEntries.DefaultIfEmpty("-"))
+                                        {
+                                            <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@entry</li>
+                                        }
+                                    </ul>
+                                </div>
+                                <div>
+                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Changed</div>
+                                    <ul class="mt-2 space-y-2">
+                                        @foreach (var entry in Item.JarDetail.ChangedEntries.DefaultIfEmpty("-"))
+                                        {
+                                            <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@entry</li>
+                                        }
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="mt-4">
+                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Package Summary</div>
+                                <ul class="mt-2 space-y-2">
+                                    @foreach (var summary in Item.JarDetail.PackageSummaries.DefaultIfEmpty(new JarPackageChangeSummary("(none)", 0, 0, 0)))
+                                    {
+                                        <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                                            <span class="font-mono">@summary.PackageName</span>
+                                            <span class="ml-2">+@summary.AddedClassCount / -@summary.RemovedClassCount / Δ@summary.ChangedClassCount</span>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                </section>
+            }
+
+            @if (Item.XmlDetail is not null)
+            {
+                <section class="space-y-3">
+                    <button type="button" class="gw-section-toggle" @onclick='() => ToggleSection(SectionXml)'>
+                        <span class="gw-section-heading">
+                            <span class="material-symbols-outlined text-[18px] text-slate-400">account_tree</span>
+                            XML Delta
+                        </span>
+                        <span class="material-symbols-outlined text-[18px] text-slate-400">@(IsSectionOpen(SectionXml) ? "expand_less" : "expand_more")</span>
+                    </button>
+
+                    @if (IsSectionOpen(SectionXml))
+                    {
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+                            <div class="grid gap-3 md:grid-cols-3">
+                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Added Nodes</div>
+                                    <div class="mt-2 text-lg font-semibold text-slate-900">@Item.XmlDetail.AddedNodes</div>
+                                </div>
+                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Removed Nodes</div>
+                                    <div class="mt-2 text-lg font-semibold text-slate-900">@Item.XmlDetail.RemovedNodes</div>
+                                </div>
+                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Changed Nodes</div>
+                                    <div class="mt-2 text-lg font-semibold text-slate-900">@Item.XmlDetail.ChangedNodeCount</div>
+                                </div>
+                            </div>
+                            <ul class="mt-3 space-y-2">
+                                @foreach (var xpath in Item.XmlDetail.ChangedXPaths.DefaultIfEmpty("-"))
+                                {
+                                    <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@xpath</li>
+                                }
+                            </ul>
+                            <div class="mt-4">
+                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Detailed Changes</div>
+                                <ul class="mt-2 space-y-2">
+                                    @foreach (var change in Item.XmlDetail.Changes.DefaultIfEmpty(new XmlChangeEntry("-", "none", null, null)))
+                                    {
+                                        <li class="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-700">
+                                            <div class="font-semibold uppercase tracking-[0.14em] text-slate-500">@change.ChangeKind</div>
+                                            <div class="mt-2 font-mono">@change.Path</div>
+                                            <div class="mt-2 text-slate-500">@(change.CurrentValue ?? "-") -> @(change.PatchValue ?? "-")</div>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                </section>
+            }
+
+            @if (Item.YamlDetail is not null)
+            {
+                <section class="space-y-3">
+                    <button type="button" class="gw-section-toggle" @onclick='() => ToggleSection(SectionYaml)'>
+                        <span class="gw-section-heading">
+                            <span class="material-symbols-outlined text-[18px] text-slate-400">data_object</span>
+                            YAML Delta
+                        </span>
+                        <span class="material-symbols-outlined text-[18px] text-slate-400">@(IsSectionOpen(SectionYaml) ? "expand_less" : "expand_more")</span>
+                    </button>
+
+                    @if (IsSectionOpen(SectionYaml))
+                    {
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+                            <div class="grid gap-3 md:grid-cols-3">
+                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Added Keys</div>
+                                    <div class="mt-2 text-lg font-semibold text-slate-900">@Item.YamlDetail.AddedKeys</div>
+                                </div>
+                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Removed Keys</div>
+                                    <div class="mt-2 text-lg font-semibold text-slate-900">@Item.YamlDetail.RemovedKeys</div>
+                                </div>
+                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Changed Nodes</div>
+                                    <div class="mt-2 text-lg font-semibold text-slate-900">@Item.YamlDetail.ChangedNodeCount</div>
+                                </div>
+                            </div>
+                            <ul class="mt-3 space-y-2">
+                                @foreach (var path in Item.YamlDetail.ChangedPaths.DefaultIfEmpty("-"))
+                                {
+                                    <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@path</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public ComparisonItemResult? Item { get; set; }
+    [Parameter] public string? CurrentArtifactPath { get; set; }
+    [Parameter] public string? PatchArtifactPath { get; set; }
+    [Parameter] public bool CanOpenCurrentArtifact { get; set; }
+    [Parameter] public bool CanOpenPatchArtifact { get; set; }
+    [Parameter] public EventCallback<string?> OnOpenPath { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public bool ShowCloseButton { get; set; }
+    [Parameter] public bool CompactMode { get; set; }
+    [Parameter] public string PanelClass { get; set; } = "gw-panel flex min-h-0 flex-col overflow-hidden";
+
+    private const string SectionSourceFiles = "source-files";
+    private const string SectionRule = "rule";
+    private const string SectionHash = "hash";
+    private const string SectionMessages = "messages";
+    private const string SectionJar = "jar";
+    private const string SectionXml = "xml";
+    private const string SectionYaml = "yaml";
+
+    private readonly HashSet<string> _openSections = new(StringComparer.OrdinalIgnoreCase);
+    private string? _lastSectionStateKey;
+
+    protected override void OnParametersSet()
+    {
+        var sectionStateKey = $"{CompactMode}:{Item?.RelativePath}";
+        if (string.Equals(sectionStateKey, _lastSectionStateKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastSectionStateKey = sectionStateKey;
+        ResetSectionState();
+    }
+
+    private Task OpenPathAsync(string? path)
+        => OnOpenPath.HasDelegate ? OnOpenPath.InvokeAsync(path) : Task.CompletedTask;
+
+    private Task CloseAsync()
+        => OnClose.HasDelegate ? OnClose.InvokeAsync() : Task.CompletedTask;
+
+    private void ToggleSection(string section)
+    {
+        if (!_openSections.Add(section))
+        {
+            _openSections.Remove(section);
+        }
+    }
+
+    private bool IsSectionOpen(string section)
+        => _openSections.Contains(section);
+
+    private void ResetSectionState()
+    {
+        _openSections.Clear();
+
+        _openSections.Add(SectionSourceFiles);
+        _openSections.Add(SectionRule);
+        _openSections.Add(SectionHash);
+        _openSections.Add(SectionMessages);
+
+        if (!CompactMode)
+        {
+            if (Item?.JarDetail is not null)
+            {
+                _openSections.Add(SectionJar);
+            }
+
+            if (Item?.XmlDetail is not null)
+            {
+                _openSections.Add(SectionXml);
+            }
+
+            if (Item?.YamlDetail is not null)
+            {
+                _openSections.Add(SectionYaml);
+            }
+        }
+    }
+
+    private static string GetStatusBadgeClass(CompareStatus status)
+        => status switch
+        {
+            CompareStatus.Ok => "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+            CompareStatus.Changed => "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200",
+            CompareStatus.Added => "bg-blue-100 text-blue-700 ring-1 ring-inset ring-blue-200",
+            CompareStatus.Removed => "bg-slate-200 text-slate-700 ring-1 ring-inset ring-slate-300",
+            CompareStatus.MissingRequired => "bg-red-100 text-red-700 ring-1 ring-inset ring-red-200",
+            CompareStatus.Error => "bg-fuchsia-100 text-fuchsia-700 ring-1 ring-inset ring-fuchsia-200",
+            _ => "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
+        };
+}

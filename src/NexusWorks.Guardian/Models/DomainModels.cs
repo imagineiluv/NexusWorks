@@ -137,10 +137,22 @@ public sealed record ComparisonItemResult(
         : new ReadOnlyCollection<string>(Messages.ToList());
 }
 
+public sealed record ComparisonOptions(
+    TimeSpan? Timeout = null,
+    int? MaxConcurrency = null,
+    bool ValidateFileTypeCombinations = true)
+{
+    public static readonly ComparisonOptions Default = new();
+}
+
 public sealed record ComparisonExecutionRequest(
     string CurrentRootPath,
     string PatchRootPath,
-    string BaselinePath);
+    string BaselinePath,
+    ComparisonOptions? Options = null)
+{
+    public ComparisonOptions EffectiveOptions => Options ?? ComparisonOptions.Default;
+}
 
 public sealed record ComparisonExecutionResult(
     DateTimeOffset StartedAt,

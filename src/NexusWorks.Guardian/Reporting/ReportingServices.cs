@@ -894,7 +894,7 @@ public sealed class GuardianReportService
 
     private static void WriteExecutionLog(ExecutionReport report)
     {
-        var lines = new[]
+        var lines = new List<string>
         {
             $"ExecutionId={report.Summary.ExecutionId}",
             $"StartedAt={report.Summary.StartedAt:O}",
@@ -909,6 +909,36 @@ public sealed class GuardianReportService
             $"ExcelReportPath={report.Artifacts.ExcelReportPath}",
             $"JsonResultPath={report.Artifacts.JsonResultPath}",
         };
+
+        var errorItems = report.Result.Items
+            .Where(static item => item.Status == Models.CompareStatus.Error)
+            .OrderBy(static item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (errorItems.Length > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"# Error Items ({errorItems.Length})");
+            foreach (var item in errorItems)
+            {
+                lines.Add($"  [{item.RuleId}] {item.RelativePath}: {item.Summary}");
+            }
+        }
+
+        var criticalItems = report.Result.Items
+            .Where(static item => item.Severity == Models.Severity.Critical && item.Status != Models.CompareStatus.Error)
+            .OrderBy(static item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (criticalItems.Length > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"# Critical Items ({criticalItems.Length})");
+            foreach (var item in criticalItems)
+            {
+                lines.Add($"  [{item.RuleId}] {item.RelativePath}: {item.Status} - {item.Summary}");
+            }
+        }
 
         File.WriteAllLines(report.Artifacts.LogPath, lines, Encoding.UTF8);
     }

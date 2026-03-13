@@ -3,7 +3,7 @@
 
 <div class="gw-shell">
     <header class="gw-toolbar">
-        <div class="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-4 lg:px-6">
+        <div class="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-6">
             <div class="flex items-center gap-3">
                 <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-300 ring-1 ring-inset ring-blue-400/30">
                     <span class="material-symbols-outlined text-[22px]">shield</span>
@@ -14,7 +14,7 @@
                 </div>
             </div>
 
-            <div class="flex flex-wrap items-center justify-end gap-3 text-right">
+            <div class="flex w-full flex-wrap items-center justify-start gap-3 text-left md:w-auto md:justify-end md:text-right">
                 <div class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300">
                     Tailwind Review Console
                 </div>
@@ -27,8 +27,8 @@
         </div>
     </header>
 
-    <main class="min-h-0 flex-1 overflow-hidden">
-        <div class="mx-auto flex h-full w-full max-w-[1600px] flex-col overflow-hidden px-4 py-4 lg:px-6 lg:py-6">
+    <main class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div class="mx-auto flex min-h-full w-full max-w-[1840px] flex-col px-4 py-4 lg:px-6 lg:py-6 2xl:px-8">
             @Body
         </div>
     </main>

@@ -6,17 +6,17 @@ namespace NexusWorks.Guardian.Baseline;
 
 public interface IBaselineReader
 {
-    IReadOnlyList<BaselineRule> Read(string baselinePath);
+    IReadOnlyList<BaselineRule> Read(string baselinePath, CancellationToken cancellationToken = default);
 }
 
 public interface IBaselineValidator
 {
-    void Validate(IReadOnlyList<BaselineRule> rules);
+    void Validate(IReadOnlyList<BaselineRule> rules, CancellationToken cancellationToken = default);
 }
 
 public interface IBaselinePreviewService
 {
-    BaselinePreviewSummary Load(string baselinePath);
+    BaselinePreviewSummary Load(string baselinePath, CancellationToken cancellationToken = default);
 }
 
 public sealed class BaselineValidationException : Exception
@@ -36,9 +36,10 @@ public sealed class ClosedXmlBaselineReader : IBaselineReader
         "compare_mode",
     ];
 
-    public IReadOnlyList<BaselineRule> Read(string baselinePath)
+    public IReadOnlyList<BaselineRule> Read(string baselinePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baselinePath);
+        cancellationToken.ThrowIfCancellationRequested();
         if (!File.Exists(baselinePath))
         {
             throw new FileNotFoundException("Baseline file was not found.", baselinePath);
@@ -180,9 +181,10 @@ public sealed class ClosedXmlBaselineReader : IBaselineReader
 
 public sealed class BaselineValidator : IBaselineValidator
 {
-    public void Validate(IReadOnlyList<BaselineRule> rules)
+    public void Validate(IReadOnlyList<BaselineRule> rules, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(rules);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var duplicateRuleId = rules
             .GroupBy(rule => rule.RuleId, StringComparer.OrdinalIgnoreCase)
@@ -203,6 +205,46 @@ public sealed class BaselineValidator : IBaselineValidator
             {
                 throw new BaselineValidationException($"Rule '{rule.RuleId}' must define relative_path or pattern.");
             }
+
+            ValidateFileTypeCompareModeCompatibility(rule);
+        }
+    }
+
+    private static void ValidateFileTypeCompareModeCompatibility(BaselineRule rule)
+    {
+        if (rule.FileType == GuardianFileType.Auto || rule.CompareMode == CompareMode.None || rule.CompareMode == CompareMode.Hash)
+        {
+            return;
+        }
+
+        var hasJarEntry = rule.CompareMode.HasFlag(CompareMode.JarEntry);
+        var hasXmlStructure = rule.CompareMode.HasFlag(CompareMode.XmlStructure);
+        var hasYamlStructure = rule.CompareMode.HasFlag(CompareMode.YamlStructure);
+
+        if (hasJarEntry && rule.FileType != GuardianFileType.Jar)
+        {
+            throw new BaselineValidationException(
+                $"Rule '{rule.RuleId}': compare_mode 'JarEntry' requires file_type 'Jar', but found '{rule.FileType}'.");
+        }
+
+        if (hasXmlStructure && rule.FileType != GuardianFileType.Xml)
+        {
+            throw new BaselineValidationException(
+                $"Rule '{rule.RuleId}': compare_mode 'XmlStructure' requires file_type 'Xml', but found '{rule.FileType}'.");
+        }
+
+        if (hasYamlStructure && rule.FileType != GuardianFileType.Yaml)
+        {
+            throw new BaselineValidationException(
+                $"Rule '{rule.RuleId}': compare_mode 'YamlStructure' requires file_type 'Yaml', but found '{rule.FileType}'.");
+        }
+
+        // Mutually exclusive structural modes
+        var structuralModeCount = (hasJarEntry ? 1 : 0) + (hasXmlStructure ? 1 : 0) + (hasYamlStructure ? 1 : 0);
+        if (structuralModeCount > 1)
+        {
+            throw new BaselineValidationException(
+                $"Rule '{rule.RuleId}': only one structural compare_mode (JarEntry, XmlStructure, YamlStructure) can be used at a time.");
         }
     }
 }
@@ -218,10 +260,10 @@ public sealed class BaselinePreviewService : IBaselinePreviewService
         _baselineValidator = baselineValidator;
     }
 
-    public BaselinePreviewSummary Load(string baselinePath)
+    public BaselinePreviewSummary Load(string baselinePath, CancellationToken cancellationToken = default)
     {
-        var rules = _baselineReader.Read(baselinePath);
-        _baselineValidator.Validate(rules);
+        var rules = _baselineReader.Read(baselinePath, cancellationToken);
+        _baselineValidator.Validate(rules, cancellationToken);
 
         return new BaselinePreviewSummary(
             rules.Count,

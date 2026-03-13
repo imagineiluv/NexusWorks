@@ -5,6 +5,9 @@ namespace NexusWorks.Guardian.Orchestration;
 
 public sealed class GuardianExecutionRunner
 {
+    /// <summary>Default execution timeout (10 minutes).</summary>
+    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(10);
+
     private readonly GuardianComparisonEngine _comparisonEngine;
     private readonly GuardianReportService _reportService;
 
@@ -21,8 +24,26 @@ public sealed class GuardianExecutionRunner
         string outputRootPath,
         string? reportTitle = null,
         CancellationToken cancellationToken = default)
+        => ExecuteAndWriteReports(request, outputRootPath, reportTitle, request.EffectiveOptions.Timeout ?? DefaultTimeout, cancellationToken);
+
+    public ExecutionReport ExecuteAndWriteReports(
+        ComparisonExecutionRequest request,
+        string outputRootPath,
+        string? reportTitle,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
     {
-        var comparisonResult = _comparisonEngine.Execute(request, cancellationToken);
-        return _reportService.WriteReports(outputRootPath, request, comparisonResult, reportTitle);
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+        try
+        {
+            var comparisonResult = _comparisonEngine.Execute(request, linkedCts.Token);
+            return _reportService.WriteReports(outputRootPath, request, comparisonResult, reportTitle);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Guardian execution timed out after {timeout.TotalSeconds:0}s.");
+        }
     }
 }

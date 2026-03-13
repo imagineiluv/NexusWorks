@@ -48,8 +48,14 @@ public sealed class FileSystemExecutionHistoryStore : IExecutionHistoryStore
             var json = File.ReadAllText(jsonResultPath);
             return JsonSerializer.Deserialize<ExecutionReport>(json, JsonOptions);
         }
-        catch
+        catch (JsonException)
         {
+            // Corrupted or incompatible JSON — safe to skip this entry
+            return null;
+        }
+        catch (IOException)
+        {
+            // File locked or inaccessible — safe to skip this entry
             return null;
         }
     }

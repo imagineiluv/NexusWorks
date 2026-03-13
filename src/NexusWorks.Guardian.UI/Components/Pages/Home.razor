@@ -9,9 +9,10 @@
 @inject IJSRuntime JSRuntime
 @inject GuardianWorkbenchService Workbench
 
-<div class="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
-    <section class="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
-        <div class="gw-panel p-5 lg:p-6">
+<div class="gw-home flex min-h-full flex-1 flex-col gap-4 lg:gap-6">
+    <div class="mx-auto w-full max-w-[1600px]">
+        <section class="gw-home-primary grid gap-4 xl:grid-cols-[minmax(0,1.02fr)_minmax(22rem,0.98fr)] 2xl:grid-cols-[minmax(0,1.08fr)_minmax(24rem,0.92fr)]">
+        <div class="gw-home-pane gw-panel p-5 lg:p-6">
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <p class="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">Execution Setup</p>
@@ -21,7 +22,7 @@
                     </p>
                 </div>
 
-                <div class="flex flex-wrap items-center justify-end gap-2">
+                <div class="flex w-full flex-wrap items-center justify-start gap-2 xl:w-auto xl:justify-end">
                     @if (HasSampleDataset)
                     {
                         <button type="button" class="gw-button-secondary" @onclick="LoadSampleDatasetAsync" disabled="@_isRunning">
@@ -40,8 +41,8 @@
             <EditForm Model="_runForm" OnValidSubmit="RunCompareAsync" class="mt-6 grid gap-4">
                 <DataAnnotationsValidator />
 
-                <div class="grid gap-4 md:grid-cols-2">
-                    <div class="space-y-2 md:col-span-2">
+                <div class="gw-home-form-grid grid gap-4">
+                    <div class="gw-home-form-full space-y-2">
                         <label class="gw-label" for="reportTitle">Report title</label>
                         <InputText id="reportTitle" @bind-Value="_runForm.ReportTitle" class="gw-input" />
                         <ValidationMessage For="@(() => _runForm.ReportTitle)" class="gw-validation" />
@@ -49,11 +50,13 @@
 
                     <div class="space-y-2">
                         <label class="gw-label" for="currentRoot">Current root</label>
-                        <div class="flex gap-2">
-                            <InputText id="currentRoot" @bind-Value="_runForm.CurrentRootPath" class="gw-input flex-1" />
-                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => BrowseFolderAsync(PathField.CurrentRoot)' disabled="@_isRunning">Browse</button>
-                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.CurrentRootPath)' disabled="@(!CanOpenCurrentRoot)">Open</button>
-                            <span class="gw-badge @CurrentRootBadge.BadgeClass">@CurrentRootBadge.Label</span>
+                        <div class="gw-field-row">
+                            <InputText id="currentRoot" @bind-Value="_runForm.CurrentRootPath" class="gw-input gw-field-input" />
+                            <div class="gw-field-actions">
+                                <button type="button" class="gw-button-secondary shrink-0" @onclick='() => BrowseFolderAsync(PathField.CurrentRoot)' disabled="@_isRunning">Browse</button>
+                                <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.CurrentRootPath)' disabled="@(!CanOpenCurrentRoot)">Open</button>
+                                <span class="gw-badge @CurrentRootBadge.BadgeClass">@CurrentRootBadge.Label</span>
+                            </div>
                         </div>
                         <ValidationMessage For="@(() => _runForm.CurrentRootPath)" class="gw-validation" />
                         @if (_recentCurrentRoots.Count > 0)
@@ -70,11 +73,13 @@
 
                     <div class="space-y-2">
                         <label class="gw-label" for="patchRoot">Patch root</label>
-                        <div class="flex gap-2">
-                            <InputText id="patchRoot" @bind-Value="_runForm.PatchRootPath" class="gw-input flex-1" />
-                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => BrowseFolderAsync(PathField.PatchRoot)' disabled="@_isRunning">Browse</button>
-                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.PatchRootPath)' disabled="@(!CanOpenPatchRoot)">Open</button>
-                            <span class="gw-badge @PatchRootBadge.BadgeClass">@PatchRootBadge.Label</span>
+                        <div class="gw-field-row">
+                            <InputText id="patchRoot" @bind-Value="_runForm.PatchRootPath" class="gw-input gw-field-input" />
+                            <div class="gw-field-actions">
+                                <button type="button" class="gw-button-secondary shrink-0" @onclick='() => BrowseFolderAsync(PathField.PatchRoot)' disabled="@_isRunning">Browse</button>
+                                <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.PatchRootPath)' disabled="@(!CanOpenPatchRoot)">Open</button>
+                                <span class="gw-badge @PatchRootBadge.BadgeClass">@PatchRootBadge.Label</span>
+                            </div>
                         </div>
                         <ValidationMessage For="@(() => _runForm.PatchRootPath)" class="gw-validation" />
                         @if (_recentPatchRoots.Count > 0)
@@ -89,13 +94,15 @@
                         }
                     </div>
 
-                    <div class="space-y-2 md:col-span-2">
+                    <div class="gw-home-form-full space-y-2">
                         <label class="gw-label" for="baselinePath">Baseline workbook</label>
-                        <div class="flex gap-2">
-                            <InputText id="baselinePath" @bind-Value="_runForm.BaselinePath" @bind-Value:after="OnBaselinePathChangedAsync" class="gw-input flex-1" />
-                            <button type="button" class="gw-button-secondary shrink-0" @onclick="BrowseBaselineAsync" disabled="@_isRunning">Browse</button>
-                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.BaselinePath)' disabled="@(!CanOpenBaselinePath)">Open</button>
-                            <span class="gw-badge @BaselinePathBadge.BadgeClass">@BaselinePathBadge.Label</span>
+                        <div class="gw-field-row">
+                            <InputText id="baselinePath" @bind-Value="_runForm.BaselinePath" @bind-Value:after="OnBaselinePathChangedAsync" class="gw-input gw-field-input" />
+                            <div class="gw-field-actions">
+                                <button type="button" class="gw-button-secondary shrink-0" @onclick="BrowseBaselineAsync" disabled="@_isRunning">Browse</button>
+                                <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.BaselinePath)' disabled="@(!CanOpenBaselinePath)">Open</button>
+                                <span class="gw-badge @BaselinePathBadge.BadgeClass">@BaselinePathBadge.Label</span>
+                            </div>
                         </div>
                         <ValidationMessage For="@(() => _runForm.BaselinePath)" class="gw-validation" />
                         @if (_recentBaselinePaths.Count > 0)
@@ -110,13 +117,15 @@
                         }
                     </div>
 
-                    <div class="space-y-2 md:col-span-2">
+                    <div class="gw-home-form-full space-y-2">
                         <label class="gw-label" for="outputRoot">Output root</label>
-                        <div class="flex gap-2">
-                            <InputText id="outputRoot" @bind-Value="_runForm.OutputRootPath" @bind-Value:after="OnOutputRootChangedAsync" class="gw-input flex-1" />
-                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => BrowseFolderAsync(PathField.OutputRoot)' disabled="@_isRunning">Browse</button>
-                            <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.OutputRootPath)' disabled="@(!CanOpenOutputRoot)">Open</button>
-                            <span class="gw-badge @OutputRootBadge.BadgeClass">@OutputRootBadge.Label</span>
+                        <div class="gw-field-row">
+                            <InputText id="outputRoot" @bind-Value="_runForm.OutputRootPath" @bind-Value:after="OnOutputRootChangedAsync" class="gw-input gw-field-input" />
+                            <div class="gw-field-actions">
+                                <button type="button" class="gw-button-secondary shrink-0" @onclick='() => BrowseFolderAsync(PathField.OutputRoot)' disabled="@_isRunning">Browse</button>
+                                <button type="button" class="gw-button-secondary shrink-0" @onclick='() => OpenPathAsync(_runForm.OutputRootPath)' disabled="@(!CanOpenOutputRoot)">Open</button>
+                                <span class="gw-badge @OutputRootBadge.BadgeClass">@OutputRootBadge.Label</span>
+                            </div>
                         </div>
                         <ValidationMessage For="@(() => _runForm.OutputRootPath)" class="gw-validation" />
                         @if (_recentOutputRoots.Count > 0)
@@ -208,68 +217,106 @@
                     </div>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-3">
-                    <button type="submit" class="gw-button" disabled="@(!CanRunCompare)">
-                        <span class="material-symbols-outlined text-[18px]">play_arrow</span>
-                        @(_isRunning ? "Running compare" : "Run compare")
-                    </button>
-                    <button type="button" class="gw-button-secondary" @onclick="RerunAsync" disabled="@(!HasReport || !CanRunCompare)">
-                        <span class="material-symbols-outlined text-[18px]">refresh</span>
-                        Rerun
-                    </button>
-                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.HtmlReportPath)' disabled="@(!CanOpenReportHtml)">
-                        <span class="material-symbols-outlined text-[18px]">web</span>
-                        Open HTML
-                    </button>
-                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.ExcelReportPath)' disabled="@(!CanOpenReportExcel)">
-                        <span class="material-symbols-outlined text-[18px]">table_view</span>
-                        Open Excel
-                    </button>
-                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.JsonResultPath)' disabled="@(!CanOpenReportJson)">
-                        <span class="material-symbols-outlined text-[18px]">data_object</span>
-                        Open JSON
-                    </button>
-                    <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.LogPath)' disabled="@(!CanOpenReportLog)">
-                        <span class="material-symbols-outlined text-[18px]">article</span>
-                        Open Log
-                    </button>
-                    <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(_report?.Artifacts.OutputDirectory)' disabled="@(!CanOpenReportOutputDirectory)">
-                        <span class="material-symbols-outlined text-[18px]">folder_open</span>
-                        Open Output
-                    </button>
-                    <button type="button" class="gw-button-secondary" @onclick="RefreshHistoryFromToolbarAsync" disabled="@_isRunning">
-                        <span class="material-symbols-outlined text-[18px]">history</span>
-                        Refresh history
-                    </button>
+                <div class="gw-home-run-actions grid gap-3">
+                    <div class="gw-action-cluster">
+                        <button type="submit" class="gw-button" disabled="@(!CanRunCompare)">
+                            <span class="material-symbols-outlined text-[18px]">play_arrow</span>
+                            @(_isRunning ? "Running compare" : "Run compare")
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick="RerunAsync" disabled="@(!HasReport || !CanRunCompare)">
+                            <span class="material-symbols-outlined text-[18px]">refresh</span>
+                            Rerun
+                        </button>
+                    </div>
+
+                    <div class="gw-home-report-actions gw-home-run-secondary gw-action-cluster">
+                        <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.HtmlReportPath)' disabled="@(!CanOpenReportHtml)">
+                            <span class="material-symbols-outlined text-[18px]">web</span>
+                            Open HTML
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.ExcelReportPath)' disabled="@(!CanOpenReportExcel)">
+                            <span class="material-symbols-outlined text-[18px]">table_view</span>
+                            Open Excel
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.JsonResultPath)' disabled="@(!CanOpenReportJson)">
+                            <span class="material-symbols-outlined text-[18px]">data_object</span>
+                            Open JSON
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.LogPath)' disabled="@(!CanOpenReportLog)">
+                            <span class="material-symbols-outlined text-[18px]">article</span>
+                            Open Log
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(_report?.Artifacts.OutputDirectory)' disabled="@(!CanOpenReportOutputDirectory)">
+                            <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                            Open Output
+                        </button>
+                        <button type="button" class="gw-button-secondary" @onclick="RefreshHistoryFromToolbarAsync" disabled="@_isRunning">
+                            <span class="material-symbols-outlined text-[18px]">history</span>
+                            Refresh history
+                        </button>
+                    </div>
+
+                    <details class="gw-home-report-drawer">
+                        <summary class="gw-button-secondary">
+                            <span class="material-symbols-outlined text-[18px]">dashboard_customize</span>
+                            Reports & history
+                        </summary>
+                        <div class="gw-home-report-drawer-panel">
+                            <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.HtmlReportPath)' disabled="@(!CanOpenReportHtml)">
+                                <span class="material-symbols-outlined text-[18px]">web</span>
+                                Open HTML
+                            </button>
+                            <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.ExcelReportPath)' disabled="@(!CanOpenReportExcel)">
+                                <span class="material-symbols-outlined text-[18px]">table_view</span>
+                                Open Excel
+                            </button>
+                            <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.JsonResultPath)' disabled="@(!CanOpenReportJson)">
+                                <span class="material-symbols-outlined text-[18px]">data_object</span>
+                                Open JSON
+                            </button>
+                            <button type="button" class="gw-button-secondary" @onclick='() => OpenFileAsync(_report?.Artifacts.LogPath)' disabled="@(!CanOpenReportLog)">
+                                <span class="material-symbols-outlined text-[18px]">article</span>
+                                Open Log
+                            </button>
+                            <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(_report?.Artifacts.OutputDirectory)' disabled="@(!CanOpenReportOutputDirectory)">
+                                <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                Open Output
+                            </button>
+                            <button type="button" class="gw-button-secondary" @onclick="RefreshHistoryFromToolbarAsync" disabled="@_isRunning">
+                                <span class="material-symbols-outlined text-[18px]">history</span>
+                                Refresh history
+                            </button>
+                        </div>
+                    </details>
                 </div>
 
-                <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    <button type="button" class="gw-badge bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200" @onclick="ShowShortcutOverlay">
+                <div class="gw-home-shortcuts mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <button type="button" class="gw-home-shortcut-primary gw-badge bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200" @onclick="ShowShortcutOverlay">
                         Shortcuts
                     </button>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Ctrl/Cmd+Enter Run</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Ctrl/Cmd+Shift+Enter Rerun</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+H History</span>
+                    <span class="gw-home-shortcut-primary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Ctrl/Cmd+Enter Run</span>
+                    <span class="gw-home-shortcut-primary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Ctrl/Cmd+Shift+Enter Rerun</span>
+                    <span class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+H History</span>
                     @if (HasSampleDataset)
                     {
-                        <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+S Sample</span>
+                        <span class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+S Sample</span>
                     }
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">[ / ] History</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">M Load History</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">/ Search</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">1-5 Filters</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">J/K or N/P Navigate</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">X Toggle Row</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+A/R/C Queue</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">O / Shift+O Open File</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+O/P Bulk Open</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">H/E/D/L/U Reports</span>
-                    <span class="gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">? Help</span>
+                    <span class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">[ / ] History</span>
+                    <span class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">M Load History</span>
+                    <span class="gw-home-shortcut-primary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">/ Search</span>
+                    <span class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">1-5 Filters</span>
+                    <span class="gw-home-shortcut-primary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">J/K or N/P Navigate</span>
+                    <span class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">X Toggle Row</span>
+                    <span class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+A/R/C Queue</span>
+                    <span class="gw-home-shortcut-primary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">O / Shift+O Open File</span>
+                    <span class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">Alt+Shift+O/P Bulk Open</span>
+                    <span class="gw-home-shortcut-secondary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">H/E/D/L/U Reports</span>
+                    <span class="gw-home-shortcut-primary gw-badge bg-white text-slate-600 ring-1 ring-inset ring-slate-200">? Help</span>
                 </div>
             </EditForm>
         </div>
 
-        <div class="gw-panel p-5 lg:p-6">
+        <div class="gw-home-pane gw-panel p-5 lg:p-6">
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <p class="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">Run Summary</p>
@@ -471,47 +518,102 @@
                 }
             </div>
         </div>
-    </section>
+        </section>
+    </div>
 
-    <section class="grid min-h-0 flex-1 gap-4 xl:grid-cols-guardian">
-        <div class="gw-panel flex min-h-0 flex-col overflow-hidden">
-            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-                <div>
-                    <p class="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">Review Queue</p>
-                    <h2 class="mt-1 text-xl font-semibold tracking-[-0.03em] text-slate-950">Comparison results</h2>
-                </div>
+    <section class="gw-home-workspace grid min-h-[32rem] gap-4 xl:min-h-[36rem] xl:flex-1 xl:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.95fr)] 2xl:grid-cols-guardian">
+        <div class="@CompactResultsPanelClass">
+            <div class="gw-home-results-toolbar border-b border-slate-200 px-5 py-4">
+                <div class="gw-home-results-header flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div>
+                        <p class="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">Review Queue</p>
+                        <h2 class="mt-1 text-xl font-semibold tracking-[-0.03em] text-slate-950">Comparison results</h2>
+                    </div>
 
-                <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
-                    @if (HasReport)
-                    {
-                        <button type="button" class="gw-button-secondary" @onclick="SelectAllVisibleItems" disabled="@(FilteredItems.Count == 0)">
-                            <span class="material-symbols-outlined text-[18px]">select_all</span>
-                            Select visible
+                    <div class="gw-home-compact-switch xl:hidden">
+                        <button type="button" class="@CompactQueueToggleClass" @onclick="ShowCompactQueue">
+                            <span class="material-symbols-outlined text-[18px]">list_alt</span>
+                            Queue
                         </button>
-                        <button type="button" class="gw-button-secondary" @onclick="SelectVisibleReviewItems" disabled="@(FilteredItems.Count == 0)">
-                            <span class="material-symbols-outlined text-[18px]">rule</span>
-                            Select review set
+                        <button type="button" class="@CompactDetailsToggleClass" @onclick="ShowCompactInspector" disabled="@(!CanToggleCompactInspector)">
+                            <span class="material-symbols-outlined text-[18px]">visibility</span>
+                            Details
                         </button>
-                        <button type="button" class="gw-button-secondary" @onclick='() => OpenSelectedArtifactsAsync(isCurrent: true)' disabled="@(!CanBulkOpenCurrent)">
-                            <span class="material-symbols-outlined text-[18px]">folder_open</span>
-                            Open selected current
-                        </button>
-                        <button type="button" class="gw-button-secondary" @onclick='() => OpenSelectedArtifactsAsync(isCurrent: false)' disabled="@(!CanBulkOpenPatch)">
-                            <span class="material-symbols-outlined text-[18px]">folder_open</span>
-                            Open selected patch
-                        </button>
-                        <button type="button" class="gw-button-secondary" @onclick="ClearBulkSelection" disabled="@(_bulkSelectedPaths.Count == 0)">
-                            <span class="material-symbols-outlined text-[18px]">deselect</span>
-                            Clear (@_bulkSelectedPaths.Count)
-                        </button>
-                    }
-                    @foreach (var filter in Filters)
-                    {
-                        <button type="button" class="@(filter == _selectedFilter ? "gw-chip-active" : "gw-chip")" @onclick="() => SelectFilter(filter)">
-                            @FilterLabel(filter)
-                        </button>
-                    }
-                    <input id="guardian-result-search" @bind="_searchText" @bind:event="oninput" class="gw-input w-full min-w-[220px] max-w-[320px]" placeholder="Search path, rule, status" />
+                    </div>
+
+                    <div class="gw-home-results-controls flex flex-col gap-3 xl:min-w-[20rem] xl:max-w-[44rem] xl:flex-1">
+                        @if (HasReport)
+                        {
+                            <div class="gw-home-bulk-actions gw-toolbar-cluster xl:justify-end">
+                                <button type="button" class="gw-button-secondary" @onclick="SelectAllVisibleItems" disabled="@(FilteredItems.Count == 0)">
+                                    <span class="material-symbols-outlined text-[18px]">select_all</span>
+                                    Select visible
+                                </button>
+                                <button type="button" class="gw-button-secondary" @onclick="SelectVisibleReviewItems" disabled="@(FilteredItems.Count == 0)">
+                                    <span class="material-symbols-outlined text-[18px]">rule</span>
+                                    Select review set
+                                </button>
+                                <button type="button" class="gw-button-secondary" @onclick='() => OpenSelectedArtifactsAsync(isCurrent: true)' disabled="@(!CanBulkOpenCurrent)">
+                                    <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                    Open selected current
+                                </button>
+                                <button type="button" class="gw-button-secondary" @onclick='() => OpenSelectedArtifactsAsync(isCurrent: false)' disabled="@(!CanBulkOpenPatch)">
+                                    <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                    Open selected patch
+                                </button>
+                                <button type="button" class="gw-button-secondary" @onclick="ClearBulkSelection" disabled="@(_bulkSelectedPaths.Count == 0)">
+                                    <span class="material-symbols-outlined text-[18px]">deselect</span>
+                                    Clear (@_bulkSelectedPaths.Count)
+                                </button>
+                            </div>
+
+                            <details class="gw-home-bulk-drawer">
+                                <summary class="gw-button-secondary">
+                                    <span class="material-symbols-outlined text-[18px]">tune</span>
+                                    Bulk actions
+                                    @if (_bulkSelectedPaths.Count > 0)
+                                    {
+                                        <span class="gw-badge bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200">@_bulkSelectedPaths.Count</span>
+                                    }
+                                </summary>
+                                <div class="gw-home-bulk-drawer-panel">
+                                    <button type="button" class="gw-button-secondary" @onclick="SelectAllVisibleItems" disabled="@(FilteredItems.Count == 0)">
+                                        <span class="material-symbols-outlined text-[18px]">select_all</span>
+                                        Select visible
+                                    </button>
+                                    <button type="button" class="gw-button-secondary" @onclick="SelectVisibleReviewItems" disabled="@(FilteredItems.Count == 0)">
+                                        <span class="material-symbols-outlined text-[18px]">rule</span>
+                                        Select review set
+                                    </button>
+                                    <button type="button" class="gw-button-secondary" @onclick='() => OpenSelectedArtifactsAsync(isCurrent: true)' disabled="@(!CanBulkOpenCurrent)">
+                                        <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                        Open selected current
+                                    </button>
+                                    <button type="button" class="gw-button-secondary" @onclick='() => OpenSelectedArtifactsAsync(isCurrent: false)' disabled="@(!CanBulkOpenPatch)">
+                                        <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                                        Open selected patch
+                                    </button>
+                                    <button type="button" class="gw-button-secondary" @onclick="ClearBulkSelection" disabled="@(_bulkSelectedPaths.Count == 0)">
+                                        <span class="material-symbols-outlined text-[18px]">deselect</span>
+                                        Clear (@_bulkSelectedPaths.Count)
+                                    </button>
+                                </div>
+                            </details>
+                        }
+
+                        <div class="gw-toolbar-cluster xl:justify-end">
+                            @foreach (var filter in Filters)
+                            {
+                                <button type="button" class="@(filter == _selectedFilter ? "gw-chip-active" : "gw-chip")" @onclick="() => SelectFilter(filter)">
+                                    @FilterLabel(filter)
+                                </button>
+                            }
+                        </div>
+
+                        <div class="w-full xl:ml-auto xl:max-w-[320px]">
+                            <input id="guardian-result-search" @bind="_searchText" @bind:event="oninput" class="gw-input w-full min-w-0" placeholder="Search path, rule, status" />
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -529,7 +631,7 @@
             }
             else
             {
-                <div class="min-h-0 overflow-auto px-2 pb-2">
+                <div class="gw-home-results-scroll min-h-0 overflow-auto px-2 pb-2">
                     <table class="gw-table">
                         <thead class="sticky top-0 bg-white/95 backdrop-blur">
                             <tr class="text-left text-xs uppercase tracking-[0.2em] text-slate-400">
@@ -537,8 +639,8 @@
                                 <th class="px-3 py-3">Path</th>
                                 <th class="px-3 py-3">Status</th>
                                 <th class="px-3 py-3">Severity</th>
-                                <th class="px-3 py-3">Type</th>
-                                <th class="px-3 py-3">Rule</th>
+                                <th class="gw-home-col-secondary px-3 py-3">Type</th>
+                                <th class="gw-home-col-secondary px-3 py-3">Rule</th>
                                 <th class="px-3 py-3">Summary</th>
                             </tr>
                         </thead>
@@ -556,6 +658,10 @@
                                     </td>
                                     <td class="px-3 py-3">
                                         <div class="font-mono text-xs text-slate-900">@row.RelativePath</div>
+                                        <div class="gw-home-row-meta">
+                                            <span class="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">@row.FileType</span>
+                                            <span class="truncate font-mono text-[11px] text-slate-500">@row.RuleId</span>
+                                        </div>
                                     </td>
                                     <td class="px-3 py-3">
                                         <span class="gw-badge @GetStatusBadgeClass(row.Status)">@row.Status</span>
@@ -563,9 +669,11 @@
                                     <td class="px-3 py-3">
                                         <span class="gw-badge @GetSeverityBadgeClass(row.Severity)">@row.Severity</span>
                                     </td>
-                                    <td class="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">@row.FileType</td>
-                                    <td class="px-3 py-3 font-mono text-xs text-slate-600">@row.RuleId</td>
-                                    <td class="px-3 py-3 text-sm text-slate-600">@row.Summary</td>
+                                    <td class="gw-home-col-secondary px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">@row.FileType</td>
+                                    <td class="gw-home-col-secondary px-3 py-3 font-mono text-xs text-slate-600">@row.RuleId</td>
+                                    <td class="px-3 py-3 text-sm text-slate-600">
+                                        <div class="gw-home-summary-text">@row.Summary</div>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -574,255 +682,25 @@
             }
         </div>
 
-        <aside class="gw-panel flex min-h-0 flex-col overflow-hidden">
-            <div class="border-b border-slate-200 px-5 py-4">
-                <div class="flex items-center justify-between gap-3">
-                    <div>
-                        <p class="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">Inspector</p>
-                        <h2 class="mt-1 text-xl font-semibold tracking-[-0.03em] text-slate-950">@(SelectedItem?.RelativePath ?? "Awaiting selection")</h2>
-                    </div>
-                    @if (SelectedItem is not null)
-                    {
-                        <span class="gw-badge @GetStatusBadgeClass(SelectedItem.Status)">@SelectedItem.Status</span>
-                    }
-                </div>
-            </div>
+        <GuardianInspectorPanel Item="SelectedItem"
+                               CurrentArtifactPath="SelectedCurrentArtifactPath"
+                               PatchArtifactPath="SelectedPatchArtifactPath"
+                               CanOpenCurrentArtifact="CanOpenSelectedCurrentArtifact"
+                               CanOpenPatchArtifact="CanOpenSelectedPatchArtifact"
+                               CompactMode="true"
+                               OnOpenPath="OpenPathAsync"
+                               OnClose="HideCompactInspector"
+                               ShowCloseButton="true"
+                               PanelClass="@CompactInspectorPanelClass" />
 
-            @if (SelectedItem is null)
-            {
-                <div class="m-5 gw-empty">
-                    <span class="material-symbols-outlined text-[28px] text-slate-400">manage_search</span>
-                    <div>
-                        <h3 class="text-base font-semibold text-slate-900">No item selected</h3>
-                        <p class="mt-2 text-sm leading-6 text-slate-500">
-                            Select a comparison row to inspect compare mode, hashes, messages, and JAR/XML/YAML deltas.
-                        </p>
-                    </div>
-                </div>
-            }
-            else
-            {
-                <div class="min-h-0 flex-1 space-y-5 overflow-auto p-5">
-                    <section class="space-y-3">
-                        <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                            <span class="material-symbols-outlined text-[18px] text-slate-400">folder_managed</span>
-                            Source Files
-                        </div>
-                        <div class="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 md:grid-cols-2">
-                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
-                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Current File</div>
-                                <div class="gw-code mt-2">@(SelectedCurrentArtifactPath ?? "-")</div>
-                                <div class="mt-3">
-                                    <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(SelectedCurrentArtifactPath)' disabled="@(!CanOpenSelectedCurrentArtifact)">
-                                        <span class="material-symbols-outlined text-[18px]">folder_open</span>
-                                        Open Current
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
-                                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Patch File</div>
-                                <div class="gw-code mt-2">@(SelectedPatchArtifactPath ?? "-")</div>
-                                <div class="mt-3">
-                                    <button type="button" class="gw-button-secondary" @onclick='() => OpenPathAsync(SelectedPatchArtifactPath)' disabled="@(!CanOpenSelectedPatchArtifact)">
-                                        <span class="material-symbols-outlined text-[18px]">folder_open</span>
-                                        Open Patch
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="space-y-3">
-                        <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                            <span class="material-symbols-outlined text-[18px] text-slate-400">rule_settings</span>
-                            Applied Rule
-                        </div>
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                            <div class="grid gap-3 md:grid-cols-2">
-                                <div>
-                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Rule ID</div>
-                                    <div class="mt-2 font-mono text-sm text-slate-900">@SelectedItem.RuleId</div>
-                                </div>
-                                <div>
-                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Compare Mode</div>
-                                    <div class="mt-2 text-sm text-slate-700">@SelectedItem.CompareMode</div>
-                                </div>
-                                <div>
-                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">File Type</div>
-                                    <div class="mt-2 text-sm text-slate-700">@SelectedItem.FileType</div>
-                                </div>
-                                <div>
-                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Severity</div>
-                                    <div class="mt-2 text-sm text-slate-700">@SelectedItem.Severity</div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="space-y-3">
-                        <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                            <span class="material-symbols-outlined text-[18px] text-slate-400">difference</span>
-                            Hash Compare
-                        </div>
-                        <div class="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                            <div>
-                                <div class="mb-2 text-xs uppercase tracking-[0.18em] text-slate-400">Current</div>
-                                <div class="gw-code">@(SelectedItem.CurrentHash ?? "-")</div>
-                            </div>
-                            <div>
-                                <div class="mb-2 text-xs uppercase tracking-[0.18em] text-slate-400">Patch</div>
-                                <div class="gw-code">@(SelectedItem.PatchHash ?? "-")</div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="space-y-3">
-                        <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                            <span class="material-symbols-outlined text-[18px] text-slate-400">notes</span>
-                            Messages
-                        </div>
-                        <ul class="space-y-2">
-                            @foreach (var message in SelectedItem.Messages.DefaultIfEmpty("No additional messages."))
-                            {
-                                <li class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600">@message</li>
-                            }
-                        </ul>
-                    </section>
-
-                    @if (SelectedItem.JarDetail is not null)
-                    {
-                        <section class="space-y-3">
-                            <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                <span class="material-symbols-outlined text-[18px] text-slate-400">view_list</span>
-                                JAR Delta
-                            </div>
-                            <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
-                                <div>Manifest Changed: <span class="font-semibold text-slate-900">@SelectedItem.JarDetail.ManifestChanged</span></div>
-                                <div class="mt-2">Class Delta: <span class="font-semibold text-slate-900">+@SelectedItem.JarDetail.AddedClassCount / -@SelectedItem.JarDetail.RemovedClassCount / Δ@SelectedItem.JarDetail.ChangedClassCount</span></div>
-                                <div class="mt-3 grid gap-3 md:grid-cols-3">
-                                    <div>
-                                        <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Added</div>
-                                        <ul class="mt-2 space-y-2">
-                                            @foreach (var entry in SelectedItem.JarDetail.AddedEntries.DefaultIfEmpty("-"))
-                                            {
-                                                <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@entry</li>
-                                            }
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Removed</div>
-                                        <ul class="mt-2 space-y-2">
-                                            @foreach (var entry in SelectedItem.JarDetail.RemovedEntries.DefaultIfEmpty("-"))
-                                            {
-                                                <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@entry</li>
-                                            }
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Changed</div>
-                                        <ul class="mt-2 space-y-2">
-                                            @foreach (var entry in SelectedItem.JarDetail.ChangedEntries.DefaultIfEmpty("-"))
-                                            {
-                                                <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@entry</li>
-                                            }
-                                        </ul>
-                                    </div>
-                                </div>
-                                <div class="mt-4">
-                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Package Summary</div>
-                                    <ul class="mt-2 space-y-2">
-                                        @foreach (var summary in SelectedItem.JarDetail.PackageSummaries.DefaultIfEmpty(new JarPackageChangeSummary("(none)", 0, 0, 0)))
-                                        {
-                                            <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-                                                <span class="font-mono">@summary.PackageName</span>
-                                                <span class="ml-2">+@summary.AddedClassCount / -@summary.RemovedClassCount / Δ@summary.ChangedClassCount</span>
-                                            </li>
-                                        }
-                                    </ul>
-                                </div>
-                            </div>
-                        </section>
-                    }
-
-                    @if (SelectedItem.XmlDetail is not null)
-                    {
-                        <section class="space-y-3">
-                            <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                <span class="material-symbols-outlined text-[18px] text-slate-400">account_tree</span>
-                                XML Delta
-                            </div>
-                            <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
-                                <div class="grid gap-3 md:grid-cols-3">
-                                    <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                                        <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Added Nodes</div>
-                                        <div class="mt-2 text-lg font-semibold text-slate-900">@SelectedItem.XmlDetail.AddedNodes</div>
-                                    </div>
-                                    <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                                        <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Removed Nodes</div>
-                                        <div class="mt-2 text-lg font-semibold text-slate-900">@SelectedItem.XmlDetail.RemovedNodes</div>
-                                    </div>
-                                    <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                                        <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Changed Nodes</div>
-                                        <div class="mt-2 text-lg font-semibold text-slate-900">@SelectedItem.XmlDetail.ChangedNodeCount</div>
-                                    </div>
-                                </div>
-                                <ul class="mt-3 space-y-2">
-                                    @foreach (var xpath in SelectedItem.XmlDetail.ChangedXPaths.DefaultIfEmpty("-"))
-                                    {
-                                        <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@xpath</li>
-                                    }
-                                </ul>
-                                <div class="mt-4">
-                                    <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Detailed Changes</div>
-                                    <ul class="mt-2 space-y-2">
-                                        @foreach (var change in SelectedItem.XmlDetail.Changes.DefaultIfEmpty(new XmlChangeEntry("-", "none", null, null)))
-                                        {
-                                            <li class="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-700">
-                                                <div class="font-semibold uppercase tracking-[0.14em] text-slate-500">@change.ChangeKind</div>
-                                                <div class="mt-2 font-mono">@change.Path</div>
-                                                <div class="mt-2 text-slate-500">@(change.CurrentValue ?? "-") -> @(change.PatchValue ?? "-")</div>
-                                            </li>
-                                        }
-                                    </ul>
-                                </div>
-                            </div>
-                        </section>
-                    }
-
-                    @if (SelectedItem.YamlDetail is not null)
-                    {
-                        <section class="space-y-3">
-                            <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                <span class="material-symbols-outlined text-[18px] text-slate-400">data_object</span>
-                                YAML Delta
-                            </div>
-                            <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
-                                <div class="grid gap-3 md:grid-cols-3">
-                                    <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                                        <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Added Keys</div>
-                                        <div class="mt-2 text-lg font-semibold text-slate-900">@SelectedItem.YamlDetail.AddedKeys</div>
-                                    </div>
-                                    <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                                        <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Removed Keys</div>
-                                        <div class="mt-2 text-lg font-semibold text-slate-900">@SelectedItem.YamlDetail.RemovedKeys</div>
-                                    </div>
-                                    <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                                        <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Changed Nodes</div>
-                                        <div class="mt-2 text-lg font-semibold text-slate-900">@SelectedItem.YamlDetail.ChangedNodeCount</div>
-                                    </div>
-                                </div>
-                                <ul class="mt-3 space-y-2">
-                                    @foreach (var path in SelectedItem.YamlDetail.ChangedPaths.DefaultIfEmpty("-"))
-                                    {
-                                        <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@path</li>
-                                    }
-                                </ul>
-                            </div>
-                        </section>
-                    }
-                </div>
-            }
-        </aside>
+        <GuardianInspectorPanel Item="SelectedItem"
+                               CurrentArtifactPath="SelectedCurrentArtifactPath"
+                               PatchArtifactPath="SelectedPatchArtifactPath"
+                               CanOpenCurrentArtifact="CanOpenSelectedCurrentArtifact"
+                               CanOpenPatchArtifact="CanOpenSelectedPatchArtifact"
+                               CompactMode="false"
+                               OnOpenPath="OpenPathAsync"
+                               PanelClass="gw-home-inspector hidden gw-panel min-h-[24rem] flex-col overflow-hidden xl:flex xl:min-h-0" />
     </section>
 </div>
 
@@ -883,6 +761,8 @@
     private DotNetObjectReference<Home>? _hotkeyReference;
     private bool _hotkeysRegistered;
     private bool _showShortcutOverlay;
+    private bool _isCompactInspectorOpen;
+    private bool _pendingSearchFocus;
     private string? _pendingDeleteExecutionId;
     private string? SelectedHistoryExecutionId { get; set; }
     private string _searchText = string.Empty;
@@ -905,6 +785,15 @@
     private string? SelectedPatchArtifactPath => ResolveSelectedArtifactPath(_report?.Request.PatchRootPath, SelectedItem, isCurrent: false);
     private bool CanOpenSelectedCurrentArtifact => CanOpenFile(SelectedCurrentArtifactPath);
     private bool CanOpenSelectedPatchArtifact => CanOpenFile(SelectedPatchArtifactPath);
+    private bool CanToggleCompactInspector => HasReport && (SelectedItem is not null || _isCompactInspectorOpen);
+    private string CompactResultsPanelClass => _isCompactInspectorOpen
+        ? "gw-home-results gw-panel hidden min-h-0 flex-col overflow-hidden xl:flex"
+        : "gw-home-results gw-panel flex min-h-0 flex-col overflow-hidden";
+    private string CompactInspectorPanelClass => _isCompactInspectorOpen
+        ? "gw-home-inspector gw-panel flex min-h-[24rem] flex-col overflow-hidden xl:hidden"
+        : "gw-home-inspector gw-panel hidden min-h-[24rem] flex-col overflow-hidden xl:hidden";
+    private string CompactQueueToggleClass => !_isCompactInspectorOpen ? "gw-chip-active" : "gw-chip";
+    private string CompactDetailsToggleClass => _isCompactInspectorOpen ? "gw-chip-active" : "gw-chip";
     private IReadOnlyList<ComparisonItemResult> BulkSelectedItems => _report?.Result.Items
         .Where(item => _bulkSelectedPaths.Contains(item.RelativePath))
         .ToArray() ?? Array.Empty<ComparisonItemResult>();
@@ -941,7 +830,7 @@
         new(["Alt", "Shift", "S"], "Load sample dataset", "Fills the form with the bundled sample dataset when it exists in the workspace."),
         new(["[", "]"], "Move history selection", "Moves the current selection through the execution history list without using the mouse."),
         new(["M"], "Load selected history", "Loads the currently selected execution history entry into the review console."),
-        new(["/"], "Focus search", "Moves keyboard focus to the result search box and selects the current text."),
+        new(["/"], "Focus search", "Moves keyboard focus to the result search box and, in compact layouts, returns from Details to Queue first."),
         new(["1", "2", "3", "4", "5"], "Switch status filters", "Applies All, Changed, Missing Required, Error, or OK filters to the result list without leaving the keyboard."),
         new(["J", "K"], "Move selection", "Moves the current result selection down or up through the filtered comparison list."),
         new(["N", "P"], "Alternative navigation", "Uses next and previous keys to move through filtered results without leaving the keyboard."),
@@ -955,7 +844,7 @@
         new(["Alt", "Shift", "P"], "Open bulk patch", "Opens every patch-side file in the current bulk-selection set."),
         new(["H", "E", "D", "L", "U"], "Open current run artifacts", "Opens the HTML report, Excel report, JSON results, execution log, or output directory for the current run."),
         new(["?"], "Open shortcut help", "Opens this reference panel from anywhere in the execution screen."),
-        new(["Esc"], "Close shortcut help", "Closes the shortcut panel without affecting the current run state."),
+        new(["Esc"], "Dismiss active panel", "Closes the shortcut panel or hides the compact Details panel without changing the current selection."),
     ];
 
     private IReadOnlyList<SummaryCard> SummaryCards =>
@@ -1005,21 +894,34 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (firstRender)
+        {
+            try
+            {
+                _hotkeyReference = DotNetObjectReference.Create(this);
+                await JSRuntime.InvokeVoidAsync("guardianHotkeys.register", _hotkeyReference);
+                _hotkeysRegistered = true;
+            }
+            catch (JSException)
+            {
+                _hotkeyReference?.Dispose();
+                _hotkeyReference = null;
+            }
+        }
+
+        if (!_pendingSearchFocus)
         {
             return;
         }
 
+        _pendingSearchFocus = false;
+
         try
         {
-            _hotkeyReference = DotNetObjectReference.Create(this);
-            await JSRuntime.InvokeVoidAsync("guardianHotkeys.register", _hotkeyReference);
-            _hotkeysRegistered = true;
+            await JSRuntime.InvokeVoidAsync("guardianHotkeys.focusResultSearch");
         }
         catch (JSException)
         {
-            _hotkeyReference?.Dispose();
-            _hotkeyReference = null;
         }
     }
 
@@ -1127,6 +1029,12 @@
                 break;
             case "toggle-shortcuts":
                 ShowShortcutOverlay();
+                break;
+            case "hide-shortcuts":
+                if (_isCompactInspectorOpen)
+                {
+                    HideCompactInspector();
+                }
                 break;
         }
     }
@@ -1385,13 +1293,14 @@
 
     private async Task FocusSearchAsync()
     {
-        try
+        _pendingSearchFocus = true;
+
+        if (_isCompactInspectorOpen)
         {
-            await JSRuntime.InvokeVoidAsync("guardianHotkeys.focusResultSearch");
+            ShowCompactQueue();
         }
-        catch (JSException)
-        {
-        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task MoveHistorySelectionAsync(int direction)
@@ -1569,10 +1478,33 @@
     {
         _selectedFilter = filter;
         SelectedRelativePath = FilteredItems.FirstOrDefault()?.RelativePath;
+        if (SelectedRelativePath is null)
+        {
+            _isCompactInspectorOpen = false;
+        }
     }
 
     private void SelectItem(string relativePath)
-        => SelectedRelativePath = relativePath;
+    {
+        SelectedRelativePath = relativePath;
+        _isCompactInspectorOpen = true;
+    }
+
+    private void ShowCompactQueue()
+        => _isCompactInspectorOpen = false;
+
+    private void ShowCompactInspector()
+    {
+        if (!CanToggleCompactInspector)
+        {
+            return;
+        }
+
+        _isCompactInspectorOpen = true;
+    }
+
+    private void HideCompactInspector()
+        => ShowCompactQueue();
 
     private void HandleFilterHotkey(ResultFilter filter)
     {
@@ -1846,6 +1778,7 @@
     {
         _report = report;
         _bulkSelectedPaths.Clear();
+        _isCompactInspectorOpen = false;
         SelectedHistoryExecutionId = report.Summary.ExecutionId;
         SelectedRelativePath = report.Result.Items
             .OrderByDescending(GetSeverityWeight)
