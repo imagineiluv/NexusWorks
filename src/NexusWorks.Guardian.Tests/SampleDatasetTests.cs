@@ -10,6 +10,7 @@ using NexusWorks.Guardian.Tests.TestSupport;
 
 namespace NexusWorks.Guardian.Tests;
 
+[Trait("Category", "Integration")]
 public class SampleDatasetTests
 {
     [Fact]

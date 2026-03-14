@@ -4,6 +4,7 @@ using NexusWorks.Guardian.Models;
 
 namespace NexusWorks.Guardian.Tests;
 
+[Trait("Category", "Evaluation")]
 public class StatusEvaluatorTests
 {
     [Fact]

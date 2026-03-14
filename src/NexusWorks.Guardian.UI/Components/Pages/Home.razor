@@ -2,12 +2,14 @@
 @implements IDisposable
 @implements IAsyncDisposable
 @using System.ComponentModel.DataAnnotations
+@using NexusWorks.Guardian.Models
 @using Microsoft.Maui.ApplicationModel
 @using Microsoft.Maui.Storage
 @using Microsoft.JSInterop
 @inject IPathSelectionService PathSelector
 @inject IJSRuntime JSRuntime
 @inject GuardianWorkbenchService Workbench
+@inject ISftpSecretStore SecretStore
 
 <div class="gw-home flex min-h-full flex-1 flex-col gap-4 lg:gap-6">
     <div class="mx-auto w-full max-w-[1600px]">
@@ -48,8 +50,14 @@
                         <ValidationMessage For="@(() => _runForm.ReportTitle)" class="gw-validation" />
                     </div>
 
-                    <div class="space-y-2">
-                        <label class="gw-label" for="currentRoot">Current root</label>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <label class="gw-label" for="currentRoot">Current input</label>
+                            <InputSelect @bind-Value="_runForm.CurrentMode" class="gw-input max-w-[10rem] text-sm">
+                                <option value="@InputSourceMode.Local">Local</option>
+                                <option value="@InputSourceMode.Sftp">SFTP</option>
+                            </InputSelect>
+                        </div>
                         <div class="gw-field-row">
                             <InputText id="currentRoot" @bind-Value="_runForm.CurrentRootPath" class="gw-input gw-field-input" />
                             <div class="gw-field-actions">
@@ -69,10 +77,75 @@
                                 }
                             </select>
                         }
+
+                        @if (IsCurrentSftp)
+                        {
+                            <div class="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                                <div class="grid gap-3 sm:grid-cols-2">
+                                    <div class="space-y-2">
+                                        <label class="gw-label" for="currentSftpHost">Current SFTP host</label>
+                                        <InputText id="currentSftpHost" @bind-Value="_runForm.CurrentSftpHost" class="gw-input" />
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="gw-label" for="currentSftpPort">Current SFTP port</label>
+                                        <InputNumber id="currentSftpPort" @bind-Value="_runForm.CurrentSftpPort" class="gw-input" />
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="gw-label" for="currentSftpUsername">Current SFTP username</label>
+                                        <InputText id="currentSftpUsername" @bind-Value="_runForm.CurrentSftpUsername" class="gw-input" />
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="gw-label" for="currentSftpAuthenticationMode">Current auth mode</label>
+                                        <InputSelect id="currentSftpAuthenticationMode" @bind-Value="_runForm.CurrentSftpAuthenticationMode" class="gw-input">
+                                            <option value="@SftpAuthenticationMode.Password">Password</option>
+                                            <option value="@SftpAuthenticationMode.PrivateKey">Private key</option>
+                                        </InputSelect>
+                                    </div>
+                                </div>
+                                @if (_runForm.CurrentSftpAuthenticationMode == SftpAuthenticationMode.Password)
+                                {
+                                    <div class="space-y-2">
+                                        <label class="gw-label" for="currentSftpPassword">Current SFTP password</label>
+                                        <input id="currentSftpPassword" @bind="_runForm.CurrentSftpPassword" type="password" class="gw-input" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="grid gap-3 sm:grid-cols-2">
+                                        <div class="space-y-2">
+                                            <label class="gw-label" for="currentSftpPrivateKeyPath">Current private key path</label>
+                                            <InputText id="currentSftpPrivateKeyPath" @bind-Value="_runForm.CurrentSftpPrivateKeyPath" class="gw-input" />
+                                        </div>
+                                        <div class="space-y-2">
+                                            <label class="gw-label" for="currentSftpPrivateKeyPassphrase">Current private key passphrase (optional)</label>
+                                            <input id="currentSftpPrivateKeyPassphrase" @bind="_runForm.CurrentSftpPrivateKeyPassphrase" type="password" class="gw-input" />
+                                        </div>
+                                    </div>
+                                }
+                                <div class="space-y-2">
+                                    <label class="gw-label" for="currentSftpRemoteRoot">Current remote root</label>
+                                    <InputText id="currentSftpRemoteRoot" @bind-Value="_runForm.CurrentSftpRemoteRoot" class="gw-input" />
+                                </div>
+                                <div class="space-y-2">
+                                    <label class="gw-label" for="currentSftpFingerprint">Current host fingerprint (optional)</label>
+                                    <InputText id="currentSftpFingerprint" @bind-Value="_runForm.CurrentSftpFingerprint" class="gw-input" />
+                                </div>
+                                <label class="flex items-center gap-2 text-sm text-slate-600">
+                                    <InputCheckbox @bind-Value="_runForm.CurrentSftpClearTargetBeforeDownload" />
+                                    <span>Clear current target folder before download</span>
+                                </label>
+                            </div>
+                        }
                     </div>
 
-                    <div class="space-y-2">
-                        <label class="gw-label" for="patchRoot">Patch root</label>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <label class="gw-label" for="patchRoot">Patch input</label>
+                            <InputSelect @bind-Value="_runForm.PatchMode" class="gw-input max-w-[10rem] text-sm">
+                                <option value="@InputSourceMode.Local">Local</option>
+                                <option value="@InputSourceMode.Sftp">SFTP</option>
+                            </InputSelect>
+                        </div>
                         <div class="gw-field-row">
                             <InputText id="patchRoot" @bind-Value="_runForm.PatchRootPath" class="gw-input gw-field-input" />
                             <div class="gw-field-actions">
@@ -91,6 +164,80 @@
                                     <option value="@path">@path</option>
                                 }
                             </select>
+                        }
+
+                        @if (IsPatchSftp)
+                        {
+                            <div class="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                                <label class="flex items-center gap-2 text-sm text-slate-600">
+                                    <InputCheckbox @bind-Value="_runForm.PatchUseCurrentSftpConnection" />
+                                    <span>Use current-side SFTP connection</span>
+                                </label>
+
+                                @if (_runForm.PatchUseCurrentSftpConnection)
+                                {
+                                    <div class="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                                        Patch download will reuse current-side host, username, fingerprint, and authentication settings.
+                                    </div>
+                                }
+
+                                @if (!_runForm.PatchUseCurrentSftpConnection)
+                                {
+                                    <div class="grid gap-3 sm:grid-cols-2">
+                                        <div class="space-y-2">
+                                            <label class="gw-label" for="patchSftpHost">Patch SFTP host</label>
+                                            <InputText id="patchSftpHost" @bind-Value="_runForm.PatchSftpHost" class="gw-input" />
+                                        </div>
+                                        <div class="space-y-2">
+                                            <label class="gw-label" for="patchSftpPort">Patch SFTP port</label>
+                                            <InputNumber id="patchSftpPort" @bind-Value="_runForm.PatchSftpPort" class="gw-input" />
+                                        </div>
+                                        <div class="space-y-2">
+                                            <label class="gw-label" for="patchSftpUsername">Patch SFTP username</label>
+                                            <InputText id="patchSftpUsername" @bind-Value="_runForm.PatchSftpUsername" class="gw-input" />
+                                        </div>
+                                        <div class="space-y-2">
+                                            <label class="gw-label" for="patchSftpAuthenticationMode">Patch auth mode</label>
+                                            <InputSelect id="patchSftpAuthenticationMode" @bind-Value="_runForm.PatchSftpAuthenticationMode" class="gw-input">
+                                                <option value="@SftpAuthenticationMode.Password">Password</option>
+                                                <option value="@SftpAuthenticationMode.PrivateKey">Private key</option>
+                                            </InputSelect>
+                                        </div>
+                                    </div>
+                                    @if (_runForm.PatchSftpAuthenticationMode == SftpAuthenticationMode.Password)
+                                    {
+                                        <div class="space-y-2">
+                                            <label class="gw-label" for="patchSftpPassword">Patch SFTP password</label>
+                                            <input id="patchSftpPassword" @bind="_runForm.PatchSftpPassword" type="password" class="gw-input" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="grid gap-3 sm:grid-cols-2">
+                                            <div class="space-y-2">
+                                                <label class="gw-label" for="patchSftpPrivateKeyPath">Patch private key path</label>
+                                                <InputText id="patchSftpPrivateKeyPath" @bind-Value="_runForm.PatchSftpPrivateKeyPath" class="gw-input" />
+                                            </div>
+                                            <div class="space-y-2">
+                                                <label class="gw-label" for="patchSftpPrivateKeyPassphrase">Patch private key passphrase (optional)</label>
+                                                <input id="patchSftpPrivateKeyPassphrase" @bind="_runForm.PatchSftpPrivateKeyPassphrase" type="password" class="gw-input" />
+                                            </div>
+                                        </div>
+                                    }
+                                    <div class="space-y-2">
+                                        <label class="gw-label" for="patchSftpFingerprint">Patch host fingerprint (optional)</label>
+                                        <InputText id="patchSftpFingerprint" @bind-Value="_runForm.PatchSftpFingerprint" class="gw-input" />
+                                    </div>
+                                }
+                                <div class="space-y-2">
+                                    <label class="gw-label" for="patchSftpRemoteRoot">Patch remote root</label>
+                                    <InputText id="patchSftpRemoteRoot" @bind-Value="_runForm.PatchSftpRemoteRoot" class="gw-input" />
+                                </div>
+                                <label class="flex items-center gap-2 text-sm text-slate-600">
+                                    <InputCheckbox @bind-Value="_runForm.PatchSftpClearTargetBeforeDownload" />
+                                    <span>Clear patch target folder before download</span>
+                                </label>
+                            </div>
                         }
                     </div>
 
@@ -785,6 +932,17 @@
     private string? SelectedPatchArtifactPath => ResolveSelectedArtifactPath(_report?.Request.PatchRootPath, SelectedItem, isCurrent: false);
     private bool CanOpenSelectedCurrentArtifact => CanOpenFile(SelectedCurrentArtifactPath);
     private bool CanOpenSelectedPatchArtifact => CanOpenFile(SelectedPatchArtifactPath);
+    private bool IsCurrentSftp => _runForm.CurrentMode == InputSourceMode.Sftp;
+    private bool IsPatchSftp => _runForm.PatchMode == InputSourceMode.Sftp;
+    private bool CurrentInputConfigReady => EvaluateSftpConfigReady(
+        _runForm.CurrentMode,
+        _runForm.CurrentSftpHost,
+        _runForm.CurrentSftpUsername,
+        _runForm.CurrentSftpAuthenticationMode,
+        _runForm.CurrentSftpPassword,
+        _runForm.CurrentSftpPrivateKeyPath,
+        _runForm.CurrentSftpRemoteRoot);
+    private bool PatchInputConfigReady => EvaluatePatchSftpConfigReady(_runForm);
     private bool CanToggleCompactInspector => HasReport && (SelectedItem is not null || _isCompactInspectorOpen);
     private string CompactResultsPanelClass => _isCompactInspectorOpen
         ? "gw-home-results gw-panel hidden min-h-0 flex-col overflow-hidden xl:flex"
@@ -799,18 +957,28 @@
         .ToArray() ?? Array.Empty<ComparisonItemResult>();
     private bool CanBulkOpenCurrent => ResolveBulkArtifactPaths(isCurrent: true).Count > 0;
     private bool CanBulkOpenPatch => ResolveBulkArtifactPaths(isCurrent: false).Count > 0;
-    private PathStatusBadge CurrentRootBadge => EvaluateDirectoryBadge(_runForm.CurrentRootPath);
-    private PathStatusBadge PatchRootBadge => EvaluateDirectoryBadge(_runForm.PatchRootPath);
+    private PathStatusBadge CurrentRootBadge => EvaluateInputRootBadge(_runForm.CurrentRootPath, _runForm.CurrentMode);
+    private PathStatusBadge PatchRootBadge => EvaluateInputRootBadge(_runForm.PatchRootPath, _runForm.PatchMode);
     private PathStatusBadge OutputRootBadge => EvaluateOutputDirectoryBadge(_runForm.OutputRootPath);
     private PathStatusBadge BaselinePathBadge => EvaluateBaselineBadge(_runForm.BaselinePath, _baselinePreviewError);
     private bool CanRunCompare => !_isRunning
         && !string.IsNullOrWhiteSpace(_runForm.ReportTitle)
         && CurrentRootBadge.CanProceed
         && PatchRootBadge.CanProceed
+        && CurrentInputConfigReady
+        && PatchInputConfigReady
         && OutputRootBadge.CanProceed
         && BaselinePathBadge.CanProceed
         && _baselinePreview is not null;
-    private RunReadinessStatus RunReadiness => EvaluateRunReadiness(_runForm.ReportTitle, CurrentRootBadge, PatchRootBadge, BaselinePathBadge, OutputRootBadge, _baselinePreview);
+    private RunReadinessStatus RunReadiness => EvaluateRunReadiness(
+        _runForm.ReportTitle,
+        CurrentRootBadge,
+        PatchRootBadge,
+        CurrentInputConfigReady,
+        PatchInputConfigReady,
+        BaselinePathBadge,
+        OutputRootBadge,
+        _baselinePreview);
     private string NoticeBannerClass => _noticeKind switch
     {
         UiNoticeKind.Success => "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -887,6 +1055,7 @@
             SelectedRelativePath = _report.Result.Items.FirstOrDefault()?.RelativePath;
         }
 
+        await LoadStoredSftpSecretsAsync();
         await RefreshRecentPathsAsync();
         await RefreshBaselinePreviewAsync();
         await RefreshHistoryAsync();
@@ -1052,10 +1221,11 @@
 
         try
         {
+            await PersistSftpSecretsAsync();
             _report = await Workbench.RunAsync(
                 new GuardianRunRequest(
-                    _runForm.CurrentRootPath,
-                    _runForm.PatchRootPath,
+                    BuildCurrentInputRequest(),
+                    BuildPatchInputRequest(),
                     _runForm.BaselinePath,
                     _runForm.OutputRootPath,
                     _runForm.ReportTitle));
@@ -1258,6 +1428,10 @@
 
         ClearError();
         _runForm.ReportTitle = "Guardian Sample Inspection";
+        _runForm.CurrentMode = InputSourceMode.Local;
+        _runForm.PatchMode = InputSourceMode.Local;
+        _runForm.PatchUseCurrentSftpConnection = true;
+        ClearSftpFields();
         _runForm.CurrentRootPath = _sampleDataset.CurrentRootPath;
         _runForm.PatchRootPath = _sampleDataset.PatchRootPath;
         _runForm.BaselinePath = _sampleDataset.BaselinePath;
@@ -1473,6 +1647,21 @@
 
     private Task OnOutputRootChangedAsync()
         => RefreshHistoryAsync();
+
+    private async Task LoadStoredSftpSecretsAsync()
+    {
+        _runForm.CurrentSftpPassword = await SecretStore.GetPasswordAsync(InputSide.Current) ?? string.Empty;
+        _runForm.CurrentSftpPrivateKeyPassphrase = await SecretStore.GetPrivateKeyPassphraseAsync(InputSide.Current) ?? string.Empty;
+        _runForm.PatchSftpPassword = await SecretStore.GetPasswordAsync(InputSide.Patch) ?? string.Empty;
+        _runForm.PatchSftpPrivateKeyPassphrase = await SecretStore.GetPrivateKeyPassphraseAsync(InputSide.Patch) ?? string.Empty;
+    }
+
+    private Task PersistSftpSecretsAsync()
+        => Task.WhenAll(
+            SecretStore.SavePasswordAsync(InputSide.Current, _runForm.CurrentSftpPassword),
+            SecretStore.SavePrivateKeyPassphraseAsync(InputSide.Current, _runForm.CurrentSftpPrivateKeyPassphrase),
+            SecretStore.SavePasswordAsync(InputSide.Patch, _runForm.PatchSftpPassword),
+            SecretStore.SavePrivateKeyPassphraseAsync(InputSide.Patch, _runForm.PatchSftpPrivateKeyPassphrase));
 
     private void SelectFilter(ResultFilter filter)
     {
@@ -2046,6 +2235,86 @@
     private static bool CanOpenDirectory(string? path)
         => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path);
 
+    private InputSourceRequest BuildCurrentInputRequest()
+        => BuildInputSourceRequest(
+            InputSide.Current,
+            _runForm.CurrentMode,
+            _runForm.CurrentRootPath,
+            _runForm.CurrentSftpHost,
+            _runForm.CurrentSftpPort,
+            _runForm.CurrentSftpUsername,
+            _runForm.CurrentSftpAuthenticationMode,
+            _runForm.CurrentSftpPassword,
+            _runForm.CurrentSftpPrivateKeyPath,
+            _runForm.CurrentSftpPrivateKeyPassphrase,
+            _runForm.CurrentSftpRemoteRoot,
+            _runForm.CurrentSftpFingerprint,
+            _runForm.CurrentSftpClearTargetBeforeDownload);
+
+    private InputSourceRequest BuildPatchInputRequest()
+    {
+        var host = _runForm.PatchUseCurrentSftpConnection ? _runForm.CurrentSftpHost : _runForm.PatchSftpHost;
+        var port = _runForm.PatchUseCurrentSftpConnection ? _runForm.CurrentSftpPort : _runForm.PatchSftpPort;
+        var username = _runForm.PatchUseCurrentSftpConnection ? _runForm.CurrentSftpUsername : _runForm.PatchSftpUsername;
+        var authenticationMode = _runForm.PatchUseCurrentSftpConnection ? _runForm.CurrentSftpAuthenticationMode : _runForm.PatchSftpAuthenticationMode;
+        var password = _runForm.PatchUseCurrentSftpConnection ? _runForm.CurrentSftpPassword : _runForm.PatchSftpPassword;
+        var privateKeyPath = _runForm.PatchUseCurrentSftpConnection ? _runForm.CurrentSftpPrivateKeyPath : _runForm.PatchSftpPrivateKeyPath;
+        var privateKeyPassphrase = _runForm.PatchUseCurrentSftpConnection ? _runForm.CurrentSftpPrivateKeyPassphrase : _runForm.PatchSftpPrivateKeyPassphrase;
+        var fingerprint = _runForm.PatchUseCurrentSftpConnection ? _runForm.CurrentSftpFingerprint : _runForm.PatchSftpFingerprint;
+
+        return BuildInputSourceRequest(
+            InputSide.Patch,
+            _runForm.PatchMode,
+            _runForm.PatchRootPath,
+            host,
+            port,
+            username,
+            authenticationMode,
+            password,
+            privateKeyPath,
+            privateKeyPassphrase,
+            _runForm.PatchSftpRemoteRoot,
+            fingerprint,
+            _runForm.PatchSftpClearTargetBeforeDownload);
+    }
+
+    private static InputSourceRequest BuildInputSourceRequest(
+        InputSide side,
+        InputSourceMode mode,
+        string localRootPath,
+        string? host,
+        int port,
+        string? username,
+        SftpAuthenticationMode authenticationMode,
+        string? password,
+        string? privateKeyPath,
+        string? privateKeyPassphrase,
+        string? remoteRootPath,
+        string? fingerprint,
+        bool clearTargetBeforeDownload)
+    {
+        if (mode == InputSourceMode.Local)
+        {
+            return new InputSourceRequest(side, mode, localRootPath);
+        }
+
+        return new InputSourceRequest(
+            side,
+            mode,
+            localRootPath,
+            new SftpInputRequest(
+                host ?? string.Empty,
+                port,
+                username ?? string.Empty,
+                remoteRootPath ?? string.Empty,
+                authenticationMode == SftpAuthenticationMode.Password ? password ?? string.Empty : null,
+                fingerprint,
+                clearTargetBeforeDownload,
+                authenticationMode,
+                authenticationMode == SftpAuthenticationMode.PrivateKey ? privateKeyPath ?? string.Empty : null,
+                authenticationMode == SftpAuthenticationMode.PrivateKey ? privateKeyPassphrase : null));
+    }
+
     private static string? ResolveSelectedArtifactPath(string? rootPath, ComparisonItemResult? item, bool isCurrent)
     {
         if (string.IsNullOrWhiteSpace(rootPath) || item is null)
@@ -2083,6 +2352,11 @@
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray()!;
     }
+
+    private static PathStatusBadge EvaluateInputRootBadge(string? path, InputSourceMode mode)
+        => mode == InputSourceMode.Local
+            ? EvaluateDirectoryBadge(path)
+            : EvaluateOutputDirectoryBadge(path);
 
     private static PathStatusBadge EvaluateDirectoryBadge(string? path)
     {
@@ -2182,6 +2456,8 @@
         string? reportTitle,
         PathStatusBadge currentRoot,
         PathStatusBadge patchRoot,
+        bool currentInputConfigReady,
+        bool patchInputConfigReady,
         PathStatusBadge baseline,
         PathStatusBadge outputRoot,
         BaselinePreviewSummary? baselinePreview)
@@ -2198,9 +2474,19 @@
             blockers.Add("current root");
         }
 
+        if (!currentInputConfigReady)
+        {
+            blockers.Add("current SFTP settings");
+        }
+
         if (!patchRoot.CanProceed)
         {
             blockers.Add("patch root");
+        }
+
+        if (!patchInputConfigReady)
+        {
+            blockers.Add("patch SFTP settings");
         }
 
         if (!baseline.CanProceed || baselinePreview is null)
@@ -2234,6 +2520,13 @@
         public RunFormModel()
         {
             ReportTitle = "Guardian Patch Inspection";
+            CurrentMode = InputSourceMode.Local;
+            PatchMode = InputSourceMode.Local;
+            CurrentSftpPort = 22;
+            CurrentSftpAuthenticationMode = SftpAuthenticationMode.Password;
+            PatchSftpPort = 22;
+            PatchSftpAuthenticationMode = SftpAuthenticationMode.Password;
+            PatchUseCurrentSftpConnection = true;
             OutputRootPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 "NexusWorks.Guardian",
@@ -2246,14 +2539,141 @@
         [Required]
         public string CurrentRootPath { get; set; } = string.Empty;
 
+        public InputSourceMode CurrentMode { get; set; }
+
+        public string CurrentSftpHost { get; set; } = string.Empty;
+
+        public int CurrentSftpPort { get; set; }
+
+        public string CurrentSftpUsername { get; set; } = string.Empty;
+
+        public SftpAuthenticationMode CurrentSftpAuthenticationMode { get; set; }
+
+        public string CurrentSftpPassword { get; set; } = string.Empty;
+
+        public string CurrentSftpPrivateKeyPath { get; set; } = string.Empty;
+
+        public string CurrentSftpPrivateKeyPassphrase { get; set; } = string.Empty;
+
+        public string CurrentSftpRemoteRoot { get; set; } = string.Empty;
+
+        public string CurrentSftpFingerprint { get; set; } = string.Empty;
+
+        public bool CurrentSftpClearTargetBeforeDownload { get; set; }
+
         [Required]
         public string PatchRootPath { get; set; } = string.Empty;
+
+        public InputSourceMode PatchMode { get; set; }
+
+        public bool PatchUseCurrentSftpConnection { get; set; }
+
+        public string PatchSftpHost { get; set; } = string.Empty;
+
+        public int PatchSftpPort { get; set; }
+
+        public string PatchSftpUsername { get; set; } = string.Empty;
+
+        public SftpAuthenticationMode PatchSftpAuthenticationMode { get; set; }
+
+        public string PatchSftpPassword { get; set; } = string.Empty;
+
+        public string PatchSftpPrivateKeyPath { get; set; } = string.Empty;
+
+        public string PatchSftpPrivateKeyPassphrase { get; set; } = string.Empty;
+
+        public string PatchSftpRemoteRoot { get; set; } = string.Empty;
+
+        public string PatchSftpFingerprint { get; set; } = string.Empty;
+
+        public bool PatchSftpClearTargetBeforeDownload { get; set; }
 
         [Required]
         public string BaselinePath { get; set; } = string.Empty;
 
         [Required]
         public string OutputRootPath { get; set; }
+    }
+
+    private static bool EvaluateSftpConfigReady(
+        InputSourceMode mode,
+        string? host,
+        string? username,
+        SftpAuthenticationMode authenticationMode,
+        string? password,
+        string? privateKeyPath,
+        string? remoteRoot)
+    {
+        if (mode == InputSourceMode.Local)
+        {
+            return true;
+        }
+
+        var hasCredentials = authenticationMode switch
+        {
+            SftpAuthenticationMode.Password => !string.IsNullOrWhiteSpace(password),
+            SftpAuthenticationMode.PrivateKey => !string.IsNullOrWhiteSpace(privateKeyPath),
+            _ => false,
+        };
+
+        return !string.IsNullOrWhiteSpace(host)
+            && !string.IsNullOrWhiteSpace(username)
+            && hasCredentials
+            && !string.IsNullOrWhiteSpace(remoteRoot);
+    }
+
+    private static bool EvaluatePatchSftpConfigReady(RunFormModel model)
+    {
+        if (model.PatchMode == InputSourceMode.Local)
+        {
+            return true;
+        }
+
+        if (model.PatchUseCurrentSftpConnection)
+        {
+            return model.CurrentMode == InputSourceMode.Sftp
+                   && EvaluateSftpConfigReady(
+                       InputSourceMode.Sftp,
+                       model.CurrentSftpHost,
+                       model.CurrentSftpUsername,
+                       model.CurrentSftpAuthenticationMode,
+                       model.CurrentSftpPassword,
+                       model.CurrentSftpPrivateKeyPath,
+                       model.PatchSftpRemoteRoot);
+        }
+
+        return EvaluateSftpConfigReady(
+            InputSourceMode.Sftp,
+            model.PatchSftpHost,
+            model.PatchSftpUsername,
+            model.PatchSftpAuthenticationMode,
+            model.PatchSftpPassword,
+            model.PatchSftpPrivateKeyPath,
+            model.PatchSftpRemoteRoot);
+    }
+
+    private void ClearSftpFields()
+    {
+        _runForm.CurrentSftpHost = string.Empty;
+        _runForm.CurrentSftpPort = 22;
+        _runForm.CurrentSftpUsername = string.Empty;
+        _runForm.CurrentSftpAuthenticationMode = SftpAuthenticationMode.Password;
+        _runForm.CurrentSftpPassword = string.Empty;
+        _runForm.CurrentSftpPrivateKeyPath = string.Empty;
+        _runForm.CurrentSftpPrivateKeyPassphrase = string.Empty;
+        _runForm.CurrentSftpRemoteRoot = string.Empty;
+        _runForm.CurrentSftpFingerprint = string.Empty;
+        _runForm.CurrentSftpClearTargetBeforeDownload = false;
+        _runForm.PatchSftpHost = string.Empty;
+        _runForm.PatchSftpPort = 22;
+        _runForm.PatchSftpUsername = string.Empty;
+        _runForm.PatchSftpAuthenticationMode = SftpAuthenticationMode.Password;
+        _runForm.PatchSftpPassword = string.Empty;
+        _runForm.PatchSftpPrivateKeyPath = string.Empty;
+        _runForm.PatchSftpPrivateKeyPassphrase = string.Empty;
+        _runForm.PatchSftpRemoteRoot = string.Empty;
+        _runForm.PatchSftpFingerprint = string.Empty;
+        _runForm.PatchSftpClearTargetBeforeDownload = false;
     }
 
     private enum ResultFilter

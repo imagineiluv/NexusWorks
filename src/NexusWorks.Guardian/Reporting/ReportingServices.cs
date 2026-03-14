@@ -866,7 +866,8 @@ public sealed class GuardianReportService
         string outputRootPath,
         ComparisonExecutionRequest request,
         ComparisonExecutionResult result,
-        string? reportTitle = null)
+        string? reportTitle = null,
+        InputAcquisitionSummary? inputAcquisition = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRootPath);
         ArgumentNullException.ThrowIfNull(request);
@@ -880,7 +881,8 @@ public sealed class GuardianReportService
             request,
             result,
             summary,
-            artifacts);
+            artifacts,
+            inputAcquisition);
 
         _htmlReportWriter.Write(report);
         _excelReportWriter.Write(report);
@@ -909,6 +911,29 @@ public sealed class GuardianReportService
             $"ExcelReportPath={report.Artifacts.ExcelReportPath}",
             $"JsonResultPath={report.Artifacts.JsonResultPath}",
         };
+
+        if (report.InputAcquisition is not null)
+        {
+            lines.Add($"InputModes={string.Join(", ", report.InputAcquisition.Sides.Select(side => $"{side.Side}:{side.Mode}"))}");
+            lines.Add($"PreparationStages={string.Join(" | ", report.InputAcquisition.PreparationPerformance.Stages.Select(stage => $"{stage.StageName}:{stage.ItemCount}@{stage.DurationMs:0.###}ms"))}");
+
+            foreach (var side in report.InputAcquisition.Sides)
+            {
+                lines.Add($"Input[{side.Side}] LocalRoot={side.EffectiveLocalRootPath}");
+                if (side.Mode == Models.InputSourceMode.Sftp)
+                {
+                    lines.Add($"Input[{side.Side}] Remote={side.Username}@{side.Host}:{side.Port}{side.RemoteRootPath}");
+                    lines.Add($"Input[{side.Side}] Auth={side.AuthenticationMode}");
+                    lines.Add($"Input[{side.Side}] DownloadedFiles={side.DownloadedFileCount}");
+                    lines.Add($"Input[{side.Side}] DownloadedBytes={side.DownloadedBytes}");
+                    lines.Add($"Input[{side.Side}] ClearedTarget={side.ClearedTargetBeforeDownload}");
+                    if (!string.IsNullOrWhiteSpace(side.HostFingerprint))
+                    {
+                        lines.Add($"Input[{side.Side}] HostFingerprint={side.HostFingerprint}");
+                    }
+                }
+            }
+        }
 
         var errorItems = report.Result.Items
             .Where(static item => item.Status == Models.CompareStatus.Error)

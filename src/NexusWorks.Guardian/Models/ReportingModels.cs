@@ -43,4 +43,5 @@ public sealed record ExecutionReport(
     ComparisonExecutionRequest Request,
     ComparisonExecutionResult Result,
     ExecutionSummary Summary,
-    ExecutionArtifacts Artifacts);
+    ExecutionArtifacts Artifacts,
+    InputAcquisitionSummary? InputAcquisition = null);

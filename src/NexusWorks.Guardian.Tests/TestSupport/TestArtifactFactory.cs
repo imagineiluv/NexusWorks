@@ -121,6 +121,6 @@ internal sealed class TestArtifactFactory : IDisposable
             parts.Add("jar-entry");
         }
 
-        return string.Join(", ", parts);
+        return parts.Count == 0 ? "auto" : string.Join(", ", parts);
     }
 }

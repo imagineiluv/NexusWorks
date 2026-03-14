@@ -5,6 +5,7 @@ using NexusWorks.Guardian.Tests.TestSupport;
 
 namespace NexusWorks.Guardian.Tests;
 
+[Trait("Category", "Baseline")]
 public class BaselineReaderTests
 {
     [Fact]

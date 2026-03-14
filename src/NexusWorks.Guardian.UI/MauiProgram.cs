@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using NexusWorks.Guardian.Acquisition;
 using NexusWorks.Guardian.Baseline;
 using NexusWorks.Guardian.Comparison;
 using NexusWorks.Guardian.Evaluation;
@@ -39,10 +40,14 @@ public static class MauiProgram
         builder.Services.AddSingleton<IExecutionHistoryStore, FileSystemExecutionHistoryStore>();
         builder.Services.AddSingleton<IRecentPathStore>(_ =>
             new FileSystemRecentPathStore(Path.Combine(FileSystem.AppDataDirectory, "state")));
+        builder.Services.AddSingleton<ISftpDownloadService, SftpDownloadService>();
+        builder.Services.AddSingleton<ISftpSecretStore, MauiSftpSecretStore>();
+        builder.Services.AddSingleton<IInputPreparationService, InputPreparationService>();
         builder.Services.AddSingleton<IPathSelectionService, PlatformPathSelectionService>();
         builder.Services.AddSingleton<GuardianComparisonEngine>();
         builder.Services.AddSingleton<GuardianReportService>();
         builder.Services.AddSingleton<GuardianExecutionRunner>();
+        builder.Services.AddSingleton<GuardianRunCoordinator>();
         builder.Services.AddSingleton<GuardianWorkbenchService>();
 
 #if DEBUG

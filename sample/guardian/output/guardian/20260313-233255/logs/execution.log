@@ -1,0 +1,19 @@
+﻿ExecutionId=da34797f5b2a
+StartedAt=2026-03-13T14:32:54.5261170+00:00
+CompletedAt=2026-03-13T14:32:55.4637900+00:00
+TotalFileCount=10
+TotalDurationMs=937.673
+PeakConcurrency=8
+StatusCounts=Added:1, Changed:4, MissingRequired:1, Ok:3, Removed:1
+SeverityCounts=Critical:1, High:3, Low:4, Medium:2
+StageMetrics=Current Input Preparation:1@0.023ms/42735.04ips/1w | Patch Input Preparation:1@0.004ms/277777.78ips/1w | Baseline Load:8@894.862ms/8.94ips/1w | Current Inventory Scan:8@7.436ms/1075.89ips/8w | Patch Inventory Scan:8@0.537ms/14908.68ips/8w | Candidate Compare:10@29.447ms/339.6ips/8w
+HtmlReportPath=/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260313-233255/report.html
+ExcelReportPath=/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260313-233255/report.xlsx
+JsonResultPath=/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/output/guardian/20260313-233255/results.json
+InputModes=Current:Local, Patch:Local
+PreparationStages=Current Input Preparation:1@0.023ms | Patch Input Preparation:1@0.004ms
+Input[Current] LocalRoot=/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/current
+Input[Patch] LocalRoot=/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/patch
+
+# Critical Items (1)
+  [G-REQ-XML] conf/required.xml: MissingRequired - Required file is missing from one or both roots.

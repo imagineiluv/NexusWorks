@@ -4,6 +4,7 @@ using NexusWorks.Guardian.RuleResolution;
 
 namespace NexusWorks.Guardian.Tests;
 
+[Trait("Category", "RuleResolution")]
 public class RuleResolverTests
 {
     [Fact]

@@ -1,0 +1,531 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SFTP local regression</title>
+  <style>
+    :root {
+      --canvas: #f3f5f7;
+      --panel: #ffffff;
+      --ink: #14202b;
+      --line: #d7dde4;
+      --muted: #5f6f7f;
+      --primary: #0f5f88;
+      --ok: #0b8f57;
+      --changed: #c57b00;
+      --added: #0f75d9;
+      --removed: #5d6976;
+      --missing: #d22f27;
+      --error: #a12665;
+      --shadow: 0 20px 45px rgba(20, 32, 43, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #e7edf3 0%, var(--canvas) 32%);
+      color: var(--ink);
+    }
+    .page {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 32px 24px 48px;
+    }
+    .hero {
+      background: #11202e;
+      color: #f5f7fa;
+      border-radius: 24px;
+      padding: 28px 32px;
+      box-shadow: var(--shadow);
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 32px; }
+    .hero p { margin: 0; color: #b8c6d3; }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .meta-card, .card, .table-card, .detail-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+    .meta-card {
+      padding: 16px 18px;
+      background: rgba(255,255,255,0.1);
+      border-color: rgba(255,255,255,0.12);
+    }
+    .sections {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      margin-top: 24px;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+    .card {
+      padding: 18px;
+    }
+    .card .eyebrow {
+      display: inline-flex;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .card .value {
+      margin-top: 12px;
+      font-size: 28px;
+      font-weight: 700;
+    }
+    .card .key {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .table-card, .detail-card {
+      overflow: hidden;
+    }
+    .toolbar {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    .toolbar input {
+      width: min(360px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid #ecf0f3;
+      font-size: 14px;
+      vertical-align: top;
+    }
+    th {
+      background: #f8fafc;
+      color: var(--muted);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    tbody tr {
+      cursor: pointer;
+    }
+    tbody tr:hover,
+    tbody tr.is-active {
+      background: #f3f8fc;
+    }
+    .table-wrap {
+      max-height: 760px;
+      overflow: auto;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: white;
+    }
+    .badge.ok { background: var(--ok); }
+    .badge.changed { background: var(--changed); }
+    .badge.added { background: var(--added); }
+    .badge.removed { background: var(--removed); }
+    .badge.missingrequired { background: var(--missing); }
+    .badge.error { background: var(--error); }
+    .detail-card {
+      padding: 20px;
+      min-height: 640px;
+    }
+    .detail-card h2 {
+      margin: 0 0 10px;
+      font-size: 24px;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .detail-field {
+      padding: 14px;
+      border-radius: 14px;
+      background: #f8fafc;
+      border: 1px solid #e6edf3;
+    }
+    .detail-field strong {
+      display: block;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .mono {
+      font-family: "JetBrains Mono", "SFMono-Regular", monospace;
+      word-break: break-all;
+    }
+    .list {
+      margin: 10px 0 0;
+      padding-left: 18px;
+    }
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+    @media (max-width: 1120px) {
+      .sections { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .page { padding: 18px 14px 28px; }
+      .hero { padding: 20px; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .toolbar { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <h1>SFTP local regression</h1>
+      <p>Guardian patch inspection report generated at 2026-03-13 23:32:55.</p>
+      <div class="meta">
+        <div class="meta-card"><strong>Execution ID</strong><div class="mono">da34797f5b2a</div></div>
+        <div class="meta-card"><strong>Total Duration</strong><div class="mono">937.67 ms</div></div>
+        <div class="meta-card"><strong>Peak Workers</strong><div class="mono">8</div></div>
+        <div class="meta-card"><strong>Current Root</strong><div class="mono">/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/current</div></div>
+        <div class="meta-card"><strong>Patch Root</strong><div class="mono">/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/patch</div></div>
+        <div class="meta-card"><strong>Baseline</strong><div class="mono">/Users/imagineiluv/Documents/GitHub/NexusWorks/sample/guardian/baseline.xlsx</div></div>
+      </div>
+    </section>
+
+    <section class="cards">
+      <article class="card">
+        <span class="eyebrow">Summary</span>
+        <div class="value">10</div>
+        <div class="key">Total Items</div>
+      </article>
+            <article class="card">
+        <span class="eyebrow">Status</span>
+        <div class="value">1</div>
+        <div class="key">Added</div>
+      </article>
+      <article class="card">
+        <span class="eyebrow">Status</span>
+        <div class="value">4</div>
+        <div class="key">Changed</div>
+      </article>
+      <article class="card">
+        <span class="eyebrow">Status</span>
+        <div class="value">1</div>
+        <div class="key">MissingRequired</div>
+      </article>
+      <article class="card">
+        <span class="eyebrow">Status</span>
+        <div class="value">3</div>
+        <div class="key">Ok</div>
+      </article>
+      <article class="card">
+        <span class="eyebrow">Status</span>
+        <div class="value">1</div>
+        <div class="key">Removed</div>
+      </article>
+
+            <article class="card">
+        <span class="eyebrow">Severity</span>
+        <div class="value">1</div>
+        <div class="key">Critical</div>
+      </article>
+      <article class="card">
+        <span class="eyebrow">Severity</span>
+        <div class="value">3</div>
+        <div class="key">High</div>
+      </article>
+      <article class="card">
+        <span class="eyebrow">Severity</span>
+        <div class="value">4</div>
+        <div class="key">Low</div>
+      </article>
+      <article class="card">
+        <span class="eyebrow">Severity</span>
+        <div class="value">2</div>
+        <div class="key">Medium</div>
+      </article>
+
+    </section>
+
+    <section class="table-card" style="margin-top: 24px;">
+      <div class="toolbar">
+        <div>
+          <strong>Performance</strong>
+          <div style="color: var(--muted); font-size: 13px;">Measured execution stages with duration, throughput, and worker usage.</div>
+        </div>
+      </div>
+      <div class="table-wrap" style="max-height: none;">
+        <table>
+          <thead>
+            <tr>
+              <th>Stage</th>
+              <th>Items</th>
+              <th>Duration</th>
+              <th>Throughput</th>
+              <th>Workers</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+  <td>Current Input Preparation</td>
+  <td>1</td>
+  <td>0.02 ms</td>
+  <td>42735.04 items/s</td>
+  <td>1</td>
+</tr>
+<tr>
+  <td>Patch Input Preparation</td>
+  <td>1</td>
+  <td>0 ms</td>
+  <td>277777.78 items/s</td>
+  <td>1</td>
+</tr>
+<tr>
+  <td>Baseline Load</td>
+  <td>8</td>
+  <td>894.86 ms</td>
+  <td>8.94 items/s</td>
+  <td>1</td>
+</tr>
+<tr>
+  <td>Current Inventory Scan</td>
+  <td>8</td>
+  <td>7.44 ms</td>
+  <td>1075.89 items/s</td>
+  <td>8</td>
+</tr>
+<tr>
+  <td>Patch Inventory Scan</td>
+  <td>8</td>
+  <td>0.54 ms</td>
+  <td>14908.68 items/s</td>
+  <td>8</td>
+</tr>
+<tr>
+  <td>Candidate Compare</td>
+  <td>10</td>
+  <td>29.45 ms</td>
+  <td>339.6 items/s</td>
+  <td>8</td>
+</tr>
+
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sections">
+      <section class="table-card">
+        <div class="toolbar">
+          <div>
+            <strong>Results</strong>
+            <div style="color: var(--muted); font-size: 13px;">Click a row to inspect hashes, messages, and JAR/XML/YAML details.</div>
+          </div>
+          <input id="searchBox" type="search" placeholder="Search by path, rule, status, severity" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Status</th>
+                <th>Severity</th>
+                <th>Rule</th>
+                <th>Type</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="detail-card">
+        <div id="detailPanel" class="stack"></div>
+      </aside>
+    </section>
+  </div>
+
+  <script>
+    const items = [{"relativePath":"conf/app.xml","ruleId":"G-XML-APP","fileType":"Xml","compareMode":"Hash, XmlStructure","status":"Changed","severity":"High","summary":"XML structure changed at 2 path(s).","currentExists":true,"patchExists":true,"currentHash":"4693252513ab7e0f926fecb6224b26bfca969b6b615d7f2ac41d5a15671416f2","patchHash":"4c07d57f6286ad11829600a7fba964e265ca24e2bc4006ab92d0d815fe45eaac","jarDetail":null,"xmlDetail":{"changedXPaths":["/app[1]/@attributes","/app[1]/modules[1]/module[2]"],"addedNodes":1,"removedNodes":0,"changedNodeCount":1,"changes":[{"path":"/app[1]/@attributes","changeKind":"attributes","currentValue":"enabled=true, version=1","patchValue":"enabled=true, version=2"},{"path":"/app[1]/modules[1]/module[2]","changeKind":"added","currentValue":null,"patchValue":"module [key=audit]"}],"isEquivalent":false},"yamlDetail":null,"messages":["XML structure changed at 2 path(s)."]},{"relativePath":"conf/feature-flags.yaml","ruleId":"G-YAML-FLAGS","fileType":"Yaml","compareMode":"Hash, YamlStructure","status":"Ok","severity":"Low","summary":"Raw hash differs, but normalized YAML is equivalent.","currentExists":true,"patchExists":true,"currentHash":"f68db16cba64b2c44df56e78e7f14bb20c6bbfe0848252ea9d9fa80540cbf091","patchHash":"aaf379d20dfad07fc0397b4872110749e110a3eb7ccd54e72cb159c0cb68c26b","jarDetail":null,"xmlDetail":null,"yamlDetail":{"changedPaths":[],"addedKeys":0,"removedKeys":0,"changedNodeCount":0,"isEquivalent":true},"messages":["Raw hash differs, but normalized YAML is equivalent."]},{"relativePath":"conf/layout.xml","ruleId":"G-XML-LAYOUT","fileType":"Xml","compareMode":"Hash, XmlStructure","status":"Ok","severity":"Low","summary":"Raw hash differs, but normalized XML is equivalent.","currentExists":true,"patchExists":true,"currentHash":"31aca25ce1c231310598cc8fcef68ab66f41bcc1238bdc1952c088e67d5e6bcb","patchHash":"8116b3ab5be94f9a08b11d223b24433e71e2a578a8f637fc813891c030736f4d","jarDetail":null,"xmlDetail":{"changedXPaths":[],"addedNodes":0,"removedNodes":0,"changedNodeCount":0,"changes":[],"isEquivalent":true},"yamlDetail":null,"messages":["Raw hash differs, but normalized XML is equivalent."]},{"relativePath":"conf/required.xml","ruleId":"G-REQ-XML","fileType":"Xml","compareMode":"Hash, XmlStructure","status":"MissingRequired","severity":"Critical","summary":"Required file is missing from one or both roots.","currentExists":false,"patchExists":false,"currentHash":null,"patchHash":null,"jarDetail":null,"xmlDetail":null,"yamlDetail":null,"messages":[]},{"relativePath":"conf/settings.yaml","ruleId":"G-YAML-SETTINGS","fileType":"Yaml","compareMode":"Hash, YamlStructure","status":"Changed","severity":"High","summary":"YAML structure changed at 2 path(s).","currentExists":true,"patchExists":true,"currentHash":"d0e2bcceac8e350be6658eded31a1e18e31bb76a85ca4d286fe5f3792a7a8cc2","patchHash":"9fef429f3ee5b2faab31b1af8d40c5f74db1b2001216ad692ca728cfb990c1c5","jarDetail":null,"xmlDetail":null,"yamlDetail":{"changedPaths":["app.features[1]","app.replicas"],"addedKeys":1,"removedKeys":0,"changedNodeCount":1,"isEquivalent":false},"messages":["YAML structure changed at 2 path(s)."]},{"relativePath":"lib/core-guardian.jar","ruleId":"G-JAR-CORE","fileType":"Jar","compareMode":"Hash, JarEntry","status":"Changed","severity":"High","summary":"JAR entries changed: \u002B1 / -0 / \u03942.","currentExists":true,"patchExists":true,"currentHash":"e67d04365f41a7bc24613b12da4fa9d97d17aecbec8dc68f49770dd08b0eada7","patchHash":"65ad6c799d98fdcf6d72d4e1e6e0fb68c2a001deff5c6f7cca5f789236d9ab45","jarDetail":{"addedEntries":["BOOT-INF/classes/com/nexus/guardian/PolicyRule.class"],"removedEntries":[],"changedEntries":["BOOT-INF/classes/com/nexus/guardian/LegacyRule.class","META-INF/MANIFEST.MF"],"manifestChanged":true,"addedClassCount":1,"removedClassCount":0,"changedClassCount":1,"packageSummaries":[{"packageName":"com.nexus.guardian","addedClassCount":1,"removedClassCount":0,"changedClassCount":1,"totalChangedCount":2}],"totalDifferenceCount":3,"isEquivalent":false},"xmlDetail":null,"yamlDetail":null,"messages":["JAR entries changed: \u002B1 / -0 / \u03942."]},{"relativePath":"notes/release.txt","ruleId":"G-TEXT-NOTES","fileType":"Auto","compareMode":"Hash","status":"Changed","severity":"Medium","summary":"Raw hash differs.","currentExists":true,"patchExists":true,"currentHash":"c5995e2511dc394983143c723bd7d6d7ab4611914598433eb128c8498b16743a","patchHash":"1527494143eaf253001bae9c86b5aeffd09a5cde5745e3ba0b893b986e22a7eb","jarDetail":null,"xmlDetail":null,"yamlDetail":null,"messages":["Raw hash differs."]},{"relativePath":"only-current.txt","ruleId":"AUTO","fileType":"Auto","compareMode":"Hash","status":"Removed","severity":"Medium","summary":"File exists only in the current root.","currentExists":true,"patchExists":false,"currentHash":"5dbe6af8d3a2a31f6696ebdae9e590977a19b827ec8e0a22ea1e3decf1a79b77","patchHash":null,"jarDetail":null,"xmlDetail":null,"yamlDetail":null,"messages":[]},{"relativePath":"only-patch.txt","ruleId":"AUTO","fileType":"Auto","compareMode":"Hash","status":"Added","severity":"Low","summary":"File exists only in the patch root.","currentExists":false,"patchExists":true,"currentHash":null,"patchHash":"9bd5cac17b2800d6f22758549ce26874ea993837e0237aeac127c3eaf95b4994","jarDetail":null,"xmlDetail":null,"yamlDetail":null,"messages":[]},{"relativePath":"same.txt","ruleId":"AUTO","fileType":"Auto","compareMode":"Hash","status":"Ok","severity":"Low","summary":"Hashes match.","currentExists":true,"patchExists":true,"currentHash":"a6328afc76e9db71da297ebff4b0d3e7a7eb3b01d917c05a6573fef121b6ecb6","patchHash":"a6328afc76e9db71da297ebff4b0d3e7a7eb3b01d917c05a6573fef121b6ecb6","jarDetail":null,"xmlDetail":null,"yamlDetail":null,"messages":["Hashes match."]}];
+    const searchBox = document.getElementById('searchBox');
+    const resultsBody = document.getElementById('resultsBody');
+    const detailPanel = document.getElementById('detailPanel');
+    let activeIndex = 0;
+
+    function escapeHtml(value) {
+      return (value ?? '').toString()
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('\"', '&quot;')
+        .replaceAll(\"'\", '&#39;');
+    }
+
+    function badgeClass(status) {
+      return String(status).replaceAll('_', '').toLowerCase();
+    }
+
+    function renderRows(filterText) {
+      const normalized = filterText.trim().toLowerCase();
+      const filtered = items
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => {
+          if (!normalized) {
+            return true;
+          }
+
+          const target = [
+            item.relativePath,
+            item.ruleId,
+            item.status,
+            item.severity,
+            item.fileType,
+            item.summary
+          ].join(' ').toLowerCase();
+
+          return target.includes(normalized);
+        });
+
+      if (filtered.length === 0) {
+        resultsBody.innerHTML = '<tr><td colspan="6">No results match the current filter.</td></tr>';
+        detailPanel.innerHTML = '<div class="detail-field">No item selected.</div>';
+        return;
+      }
+
+      if (!filtered.some(entry => entry.index === activeIndex)) {
+        activeIndex = filtered[0].index;
+      }
+
+      resultsBody.innerHTML = filtered.map(({ item, index }) => `
+        <tr data-index="${index}" class="${index === activeIndex ? 'is-active' : ''}">
+          <td class="mono">${escapeHtml(item.relativePath)}</td>
+          <td><span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span></td>
+          <td>${escapeHtml(item.severity)}</td>
+          <td class="mono">${escapeHtml(item.ruleId)}</td>
+          <td>${escapeHtml(item.fileType)}</td>
+          <td>${escapeHtml(item.summary)}</td>
+        </tr>`).join('');
+
+      for (const row of resultsBody.querySelectorAll('tr[data-index]')) {
+        row.addEventListener('click', () => {
+          activeIndex = Number(row.dataset.index);
+          renderRows(searchBox.value);
+        });
+      }
+
+      renderDetail(items[activeIndex]);
+    }
+
+    function renderDetail(item) {
+      const messages = (item.messages ?? []).map(message => `<li>${escapeHtml(message)}</li>`).join('');
+      const jarDetail = item.jarDetail
+        ? `
+          <div class="detail-field">
+            <strong>JAR Detail</strong>
+            <div>Manifest Changed: ${escapeHtml(String(item.jarDetail.manifestChanged))}</div>
+            <div>Added: ${item.jarDetail.addedEntries.length}</div>
+            <div>Removed: ${item.jarDetail.removedEntries.length}</div>
+            <div>Changed: ${item.jarDetail.changedEntries.length}</div>
+            <div>Class Delta: +${item.jarDetail.addedClassCount} / -${item.jarDetail.removedClassCount} / Δ${item.jarDetail.changedClassCount}</div>
+            <ul class="list mono">
+              ${item.jarDetail.addedEntries.map(entry => `<li>+ ${escapeHtml(entry)}</li>`).join('')}
+              ${item.jarDetail.removedEntries.map(entry => `<li>- ${escapeHtml(entry)}</li>`).join('')}
+              ${item.jarDetail.changedEntries.map(entry => `<li>* ${escapeHtml(entry)}</li>`).join('')}
+            </ul>
+            <ul class="list">
+              ${item.jarDetail.packageSummaries.map(summary => `<li>${escapeHtml(summary.packageName)}: +${summary.addedClassCount} / -${summary.removedClassCount} / Δ${summary.changedClassCount}</li>`).join('')}
+            </ul>
+          </div>`
+        : '';
+      const xmlDetail = item.xmlDetail
+        ? `
+          <div class="detail-field">
+            <strong>XML Detail</strong>
+            <div>Added Nodes: ${item.xmlDetail.addedNodes}</div>
+            <div>Removed Nodes: ${item.xmlDetail.removedNodes}</div>
+            <div>Changed Nodes: ${item.xmlDetail.changedNodeCount}</div>
+            <ul class="list mono">
+              ${item.xmlDetail.changedXPaths.map(path => `<li>${escapeHtml(path)}</li>`).join('')}
+            </ul>
+            <ul class="list">
+              ${item.xmlDetail.changes.map(change => `<li><strong>${escapeHtml(change.changeKind)}</strong> ${escapeHtml(change.path)}<br />${escapeHtml(change.currentValue ?? '-')} -> ${escapeHtml(change.patchValue ?? '-')}</li>`).join('')}
+            </ul>
+          </div>`
+        : '';
+      const yamlDetail = item.yamlDetail
+        ? `
+          <div class="detail-field">
+            <strong>YAML Detail</strong>
+            <div>Added Keys: ${item.yamlDetail.addedKeys}</div>
+            <div>Removed Keys: ${item.yamlDetail.removedKeys}</div>
+            <div>Changed Nodes: ${item.yamlDetail.changedNodeCount}</div>
+            <ul class="list mono">
+              ${item.yamlDetail.changedPaths.map(path => `<li>${escapeHtml(path)}</li>`).join('')}
+            </ul>
+          </div>`
+        : '';
+
+      detailPanel.innerHTML = `
+        <div>
+          <h2>${escapeHtml(item.relativePath)}</h2>
+          <span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-field"><strong>Rule ID</strong><div class="mono">${escapeHtml(item.ruleId)}</div></div>
+          <div class="detail-field"><strong>Severity</strong><div>${escapeHtml(item.severity)}</div></div>
+          <div class="detail-field"><strong>File Type</strong><div>${escapeHtml(item.fileType)}</div></div>
+          <div class="detail-field"><strong>Compare Mode</strong><div>${escapeHtml(item.compareMode)}</div></div>
+          <div class="detail-field"><strong>Current Hash</strong><div class="mono">${escapeHtml(item.currentHash ?? '-')}</div></div>
+          <div class="detail-field"><strong>Patch Hash</strong><div class="mono">${escapeHtml(item.patchHash ?? '-')}</div></div>
+          <div class="detail-field"><strong>Current Exists</strong><div>${escapeHtml(String(item.currentExists))}</div></div>
+          <div class="detail-field"><strong>Patch Exists</strong><div>${escapeHtml(String(item.patchExists))}</div></div>
+          <div class="detail-field" style="grid-column: 1 / -1;">
+            <strong>Summary</strong>
+            <div>${escapeHtml(item.summary)}</div>
+          </div>
+          <div class="detail-field" style="grid-column: 1 / -1;">
+            <strong>Messages</strong>
+            <ul class="list">
+              ${messages || '<li>No additional messages.</li>'}
+            </ul>
+          </div>
+          ${jarDetail}
+          ${xmlDetail}
+          ${yamlDetail}
+        </div>`;
+    }
+
+    searchBox.addEventListener('input', event => renderRows(event.target.value));
+    renderRows('');
+  </script>
+</body>
+</html>

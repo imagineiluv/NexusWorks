@@ -4,6 +4,7 @@ using NexusWorks.Guardian.Tests.TestSupport;
 
 namespace NexusWorks.Guardian.Tests;
 
+[Trait("Category", "Comparison")]
 public class ComparersTests
 {
     [Fact]

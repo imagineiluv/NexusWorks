@@ -3,6 +3,7 @@ using NexusWorks.Guardian;
 
 namespace NexusWorks.Guardian.Tests;
 
+[Trait("Category", "Infrastructure")]
 public class GuardianAssemblyMarkerTests
 {
     [Fact]

@@ -8,18 +8,18 @@ namespace NexusWorks.Guardian.UI.Services;
 
 public sealed class GuardianWorkbenchService
 {
-    private readonly GuardianExecutionRunner _executionRunner;
+    private readonly GuardianRunCoordinator _runCoordinator;
     private readonly IExecutionHistoryStore _historyStore;
     private readonly IRecentPathStore _recentPathStore;
     private readonly IBaselinePreviewService _baselinePreviewService;
 
     public GuardianWorkbenchService(
-        GuardianExecutionRunner executionRunner,
+        GuardianRunCoordinator runCoordinator,
         IExecutionHistoryStore historyStore,
         IRecentPathStore recentPathStore,
         IBaselinePreviewService baselinePreviewService)
     {
-        _executionRunner = executionRunner;
+        _runCoordinator = runCoordinator;
         _historyStore = historyStore;
         _recentPathStore = recentPathStore;
         _baselinePreviewService = baselinePreviewService;
@@ -34,14 +34,10 @@ public sealed class GuardianWorkbenchService
         var report = await Task.Run(
             () =>
             {
-                var executionReport = _executionRunner.ExecuteAndWriteReports(
-                    new ComparisonExecutionRequest(request.CurrentRootPath, request.PatchRootPath, request.BaselinePath),
-                    request.OutputRootPath,
-                    request.ReportTitle,
-                    cancellationToken);
+                var executionReport = _runCoordinator.RunAsync(request, cancellationToken).GetAwaiter().GetResult();
 
-                _recentPathStore.Remember(RecentPathKind.CurrentRoot, request.CurrentRootPath);
-                _recentPathStore.Remember(RecentPathKind.PatchRoot, request.PatchRootPath);
+                _recentPathStore.Remember(RecentPathKind.CurrentRoot, request.CurrentInput.LocalRootPath);
+                _recentPathStore.Remember(RecentPathKind.PatchRoot, request.PatchInput.LocalRootPath);
                 _recentPathStore.Remember(RecentPathKind.BaselineFile, request.BaselinePath);
                 _recentPathStore.Remember(RecentPathKind.OutputRoot, request.OutputRootPath);
                 return executionReport;
@@ -96,10 +92,3 @@ public sealed class GuardianWorkbenchService
             return deleted;
         });
 }
-
-public sealed record GuardianRunRequest(
-    string CurrentRootPath,
-    string PatchRootPath,
-    string BaselinePath,
-    string OutputRootPath,
-    string ReportTitle);

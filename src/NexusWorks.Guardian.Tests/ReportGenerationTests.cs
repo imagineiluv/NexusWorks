@@ -12,6 +12,7 @@ using NexusWorks.Guardian.Tests.TestSupport;
 
 namespace NexusWorks.Guardian.Tests;
 
+[Trait("Category", "Reporting")]
 public class ReportGenerationTests
 {
     [Fact]
