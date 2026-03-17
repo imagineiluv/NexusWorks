@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using NexusWorks.Guardian.Baseline;
 using NexusWorks.Guardian.Comparison;
 using NexusWorks.Guardian.Infrastructure;
@@ -56,13 +57,17 @@ public sealed class GuardianComparisonEngine
 
         _logger.StageStart("Baseline Load");
         var baselineStopwatch = Stopwatch.StartNew();
-        var rules = _baselineReader.Read(request.BaselinePath, cancellationToken);
+        var workbook = _baselineReader.Read(request.BaselinePath, cancellationToken);
+        var rules = workbook.Rules;
         _baselineValidator.Validate(rules, cancellationToken);
         baselineStopwatch.Stop();
         stageMetrics.Add(CreateStageMetric("Baseline Load", rules.Count, 1, baselineStopwatch.Elapsed));
         _logger.StageEnd("Baseline Load", rules.Count, baselineStopwatch.Elapsed.TotalMilliseconds);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        var globalExcludePatterns = BuildGlobalExcludePatterns(workbook.GlobalExcludes);
+        var severityLookup = BuildSeverityLookup(workbook.SeverityOverrides);
 
         _logger.StageStart("Current Inventory Scan");
         var currentScanStopwatch = Stopwatch.StartNew();
@@ -92,6 +97,12 @@ public sealed class GuardianComparisonEngine
         candidatePaths.UnionWith(rules
             .Where(static rule => !string.IsNullOrWhiteSpace(rule.RelativePath))
             .Select(static rule => NormalizedPathUtility.NormalizeRelativePath(rule.RelativePath!)));
+
+        // Apply global exclude patterns from EXCLUDES sheet
+        if (globalExcludePatterns.Count > 0)
+        {
+            candidatePaths.RemoveWhere(path => IsGloballyExcluded(path, globalExcludePatterns));
+        }
 
         var orderedCandidatePaths = candidatePaths
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
@@ -123,7 +134,15 @@ public sealed class GuardianComparisonEngine
                 matchedRuleIds.TryAdd(resolvedRule.BaselineRule.RuleId, 0);
             }
 
-            primaryItems[index] = _fileComparer.Compare(relativePath, resolvedRule, current, patch);
+            var result = _fileComparer.Compare(relativePath, resolvedRule, current, patch);
+
+            // Apply SEVERITY_MAP overrides
+            if (severityLookup.Count > 0)
+            {
+                result = ApplySeverityOverride(result, severityLookup);
+            }
+
+            primaryItems[index] = result;
             Interlocked.Increment(ref comparedItemCount);
         });
         compareStopwatch.Stop();
@@ -158,8 +177,15 @@ public sealed class GuardianComparisonEngine
             {
                 var rule = unmatchedRequiredRules[index];
                 var syntheticPath = NormalizedPathUtility.NormalizeRelativePath(rule.Pattern!);
-                var resolvedRule = ResolvedRuleFactory.FromBaselineRule(rule, syntheticPath, "pattern-unmatched");
-                backfillItems[index] = _fileComparer.Compare(syntheticPath, resolvedRule, current: null, patch: null);
+                var resolvedRule = ResolvedRuleFactory.FromBaselineRule(rule, syntheticPath, GuardianConstants.RuleSource.PatternUnmatched);
+                var result = _fileComparer.Compare(syntheticPath, resolvedRule, current: null, patch: null);
+
+                if (severityLookup.Count > 0)
+                {
+                    result = ApplySeverityOverride(result, severityLookup);
+                }
+
+                backfillItems[index] = result;
             });
             backfillStopwatch.Stop();
             stageMetrics.Add(CreateStageMetric("Missing Required Backfill", backfillItems.Length, backfillConcurrency, backfillStopwatch.Elapsed));
@@ -172,6 +198,75 @@ public sealed class GuardianComparisonEngine
         var performance = new ExecutionPerformanceSummary(totalStopwatch.Elapsed.TotalMilliseconds, stageMetrics.ToArray());
         return new ComparisonExecutionResult(startedAt, completedAt, items, performance);
     }
+
+    // ── Global exclude helpers ──
+
+    private static IReadOnlyList<Regex> BuildGlobalExcludePatterns(IReadOnlyList<ExcludePattern> excludes)
+    {
+        if (excludes.Count == 0)
+        {
+            return Array.Empty<Regex>();
+        }
+
+        return excludes
+            .Select(exclude => BuildGlobRegex(exclude.Pattern))
+            .ToArray();
+    }
+
+    private static Regex BuildGlobRegex(string pattern)
+    {
+        var normalizedPattern = pattern.Replace('\\', '/').Trim();
+        var regexPattern = Regex.Escape(normalizedPattern)
+            .Replace(@"\*\*", "___DOUBLE_WILDCARD___")
+            .Replace(@"\*", "[^/]*")
+            .Replace(@"\?", "[^/]")
+            .Replace("___DOUBLE_WILDCARD___", ".*");
+
+        return new Regex($"^{regexPattern}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    }
+
+    private static bool IsGloballyExcluded(string path, IReadOnlyList<Regex> patterns)
+    {
+        for (var i = 0; i < patterns.Count; i++)
+        {
+            if (patterns[i].IsMatch(path))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ── Severity override helpers ──
+
+    private static Dictionary<(GuardianFileType, CompareStatus), Severity> BuildSeverityLookup(
+        IReadOnlyList<SeverityOverride> overrides)
+    {
+        if (overrides.Count == 0)
+        {
+            return new Dictionary<(GuardianFileType, CompareStatus), Severity>();
+        }
+
+        return overrides.ToDictionary(
+            o => (o.FileType, o.Status),
+            o => o.Severity);
+    }
+
+    private static ComparisonItemResult ApplySeverityOverride(
+        ComparisonItemResult result,
+        Dictionary<(GuardianFileType, CompareStatus), Severity> lookup)
+    {
+        if (lookup.TryGetValue((result.FileType, result.Status), out var overriddenSeverity)
+            && overriddenSeverity != result.Severity)
+        {
+            return result with { Severity = overriddenSeverity };
+        }
+
+        return result;
+    }
+
+    // ── Shared helpers ──
 
     private static ExecutionStageMetric CreateStageMetric(string stageName, int itemCount, int concurrency, TimeSpan elapsed)
         => new(stageName, itemCount, elapsed.TotalMilliseconds, Math.Max(1, concurrency));

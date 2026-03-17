@@ -43,7 +43,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISftpDownloadService, SftpDownloadService>();
         builder.Services.AddSingleton<ISftpSecretStore, MauiSftpSecretStore>();
         builder.Services.AddSingleton<IInputPreparationService, InputPreparationService>();
-        builder.Services.AddSingleton<IPathSelectionService, PlatformPathSelectionService>();
+        builder.Services.AddSingleton<IPathSelectionService>(
+#if WINDOWS
+            _ => new Guardian.UI.Platforms.Windows.WindowsPathSelectionService()
+#elif MACCATALYST
+            _ => new Guardian.UI.Platforms.MacCatalyst.MacCatalystPathSelectionService()
+#else
+            _ => throw new PlatformNotSupportedException("No path selection service is available for this platform.")
+#endif
+        );
         builder.Services.AddSingleton<GuardianComparisonEngine>();
         builder.Services.AddSingleton<GuardianReportService>();
         builder.Services.AddSingleton<GuardianExecutionRunner>();

@@ -1,0 +1,25 @@
+@* Dropdown that displays recent paths and fires a callback when one is selected. *@
+@if (Paths.Count > 0)
+{
+    <select class="gw-input text-sm" @onchange="OnSelectionChanged">
+        <option value="">@Placeholder</option>
+        @foreach (var path in Paths)
+        {
+            <option value="@path">@path</option>
+        }
+    </select>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<string> Paths { get; set; } = Array.Empty<string>();
+
+    [Parameter]
+    public string Placeholder { get; set; } = "Recent paths";
+
+    [Parameter, EditorRequired]
+    public EventCallback<string?> OnPathSelected { get; set; }
+
+    private Task OnSelectionChanged(ChangeEventArgs args)
+        => OnPathSelected.InvokeAsync(args.Value?.ToString());
+}

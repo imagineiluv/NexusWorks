@@ -20,7 +20,8 @@ public class BaselineReaderTests
             ]);
 
         var reader = new ClosedXmlBaselineReader();
-        var rules = reader.Read(baselinePath);
+        var workbook = reader.Read(baselinePath);
+        var rules = workbook.Rules;
 
         rules.Should().HaveCount(2);
         rules[0].RelativePath.Should().Be("conf/app.xml");

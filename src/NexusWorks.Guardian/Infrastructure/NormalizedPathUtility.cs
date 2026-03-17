@@ -1,4 +1,5 @@
 using NexusWorks.Guardian.Models;
+using static NexusWorks.Guardian.GuardianConstants;
 
 namespace NexusWorks.Guardian.Infrastructure;
 
@@ -25,9 +26,9 @@ internal static class NormalizedPathUtility
         var extension = Path.GetExtension(relativePath);
         return extension.ToLowerInvariant() switch
         {
-            ".jar" => GuardianFileType.Jar,
-            ".xml" => GuardianFileType.Xml,
-            ".yaml" or ".yml" => GuardianFileType.Yaml,
+            FileExtension.Jar => GuardianFileType.Jar,
+            FileExtension.Xml => GuardianFileType.Xml,
+            FileExtension.Yaml or FileExtension.Yml => GuardianFileType.Yaml,
             _ => GuardianFileType.Auto,
         };
     }

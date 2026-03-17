@@ -1,0 +1,31 @@
+@using System.Linq.Expressions
+@using NexusWorks.Guardian.UI.Components.Pages
+
+<div class="gw-field-row">
+    <InputText id="@Id" Value="@Value" ValueChanged="@ValueChanged" ValueExpression="@ValueExpression" class="gw-input gw-field-input" />
+    <div class="gw-field-actions">
+        <button type="button" class="gw-button-secondary shrink-0" @onclick="OnBrowseClicked" disabled="@IsDisabled">Browse</button>
+        <button type="button" class="gw-button-secondary shrink-0" @onclick="OnOpenClicked" disabled="@(!CanOpen)">Open</button>
+        <StatusBadge Text="@Badge.Label" BadgeClass="@Badge.BadgeClass" />
+    </div>
+</div>
+<ValidationMessage For="@ValueExpression" class="gw-validation" />
+<RecentPathSelector Paths="@RecentPaths" Placeholder="@RecentPlaceholder" OnPathSelected="@OnRecentPathSelected" />
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = string.Empty;
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public Expression<Func<string?>>? ValueExpression { get; set; }
+
+    [Parameter, EditorRequired] public EventCallback OnBrowseClicked { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnOpenClicked { get; set; }
+    [Parameter] public bool CanOpen { get; set; }
+    [Parameter] public bool IsDisabled { get; set; }
+
+    [Parameter, EditorRequired] public PathStatusBadge Badge { get; set; } = default!;
+
+    [Parameter] public IReadOnlyList<string> RecentPaths { get; set; } = Array.Empty<string>();
+    [Parameter] public string RecentPlaceholder { get; set; } = "Recent paths";
+    [Parameter] public EventCallback<string?> OnRecentPathSelected { get; set; }
+}

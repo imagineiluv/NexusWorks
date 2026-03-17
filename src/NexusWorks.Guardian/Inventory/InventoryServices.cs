@@ -27,20 +27,24 @@ public sealed class FileSystemInventoryScanner : IInventoryScanner
             throw new DirectoryNotFoundException($"Root path '{rootPath}' does not exist.");
         }
 
-        var filePaths = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories).ToArray();
-        if (filePaths.Length == 0)
+        // Stream file enumeration directly into Parallel.ForEach to avoid
+        // materializing the full file list into an array. The partitioner
+        // pulls items on demand, keeping memory proportional to the degree
+        // of parallelism instead of total file count.
+        var fileEnumerable = Directory.EnumerateFiles(rootPath, "*", new EnumerationOptions
         {
-            return new Dictionary<string, FileInventoryEntry>(StringComparer.OrdinalIgnoreCase);
-        }
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+        });
 
         var result = new ConcurrentDictionary<string, FileInventoryEntry>(StringComparer.OrdinalIgnoreCase);
         var parallelOptions = new ParallelOptions
         {
             CancellationToken = cancellationToken,
-            MaxDegreeOfParallelism = GuardianPerformanceTuning.GetWorkerCount(filePaths.Length),
+            MaxDegreeOfParallelism = GuardianPerformanceTuning.GetWorkerCount(),
         };
 
-        Parallel.ForEach(filePaths, parallelOptions, filePath =>
+        Parallel.ForEach(fileEnumerable, parallelOptions, filePath =>
         {
             var relativePath = NormalizedPathUtility.NormalizeRelativePath(Path.GetRelativePath(rootPath, filePath));
             var fileInfo = new FileInfo(filePath);

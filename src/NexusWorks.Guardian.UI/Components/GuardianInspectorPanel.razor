@@ -1,5 +1,5 @@
 <div class="@PanelClass">
-    <div class="border-b border-slate-200 px-5 py-4">
+    <div class="gw-inspector-header">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
                 <p class="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">Inspector</p>
@@ -36,7 +36,7 @@
     }
     else
     {
-        <div class="min-h-0 flex-1 space-y-5 overflow-auto p-5">
+        <div class="gw-inspector-body">
             <section class="space-y-3">
                 <button type="button" class="gw-section-toggle" @onclick='() => ToggleSection(SectionSourceFiles)'>
                     <span class="gw-section-heading">
@@ -164,7 +164,7 @@
 
                     @if (IsSectionOpen(SectionJar))
                     {
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+                        <div class="gw-inspector-section">
                             <div>Manifest Changed: <span class="font-semibold text-slate-900">@Item.JarDetail.ManifestChanged</span></div>
                             <div class="mt-2">Class Delta: <span class="font-semibold text-slate-900">+@Item.JarDetail.AddedClassCount / -@Item.JarDetail.RemovedClassCount / Δ@Item.JarDetail.ChangedClassCount</span></div>
                             <div class="mt-3 grid gap-3 md:grid-cols-3">
@@ -173,7 +173,7 @@
                                     <ul class="mt-2 space-y-2">
                                         @foreach (var entry in Item.JarDetail.AddedEntries.DefaultIfEmpty("-"))
                                         {
-                                            <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@entry</li>
+                                            <li class="gw-inspector-list-item font-mono">@entry</li>
                                         }
                                     </ul>
                                 </div>
@@ -182,7 +182,7 @@
                                     <ul class="mt-2 space-y-2">
                                         @foreach (var entry in Item.JarDetail.RemovedEntries.DefaultIfEmpty("-"))
                                         {
-                                            <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@entry</li>
+                                            <li class="gw-inspector-list-item font-mono">@entry</li>
                                         }
                                     </ul>
                                 </div>
@@ -191,7 +191,7 @@
                                     <ul class="mt-2 space-y-2">
                                         @foreach (var entry in Item.JarDetail.ChangedEntries.DefaultIfEmpty("-"))
                                         {
-                                            <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@entry</li>
+                                            <li class="gw-inspector-list-item font-mono">@entry</li>
                                         }
                                     </ul>
                                 </div>
@@ -201,7 +201,7 @@
                                 <ul class="mt-2 space-y-2">
                                     @foreach (var summary in Item.JarDetail.PackageSummaries.DefaultIfEmpty(new JarPackageChangeSummary("(none)", 0, 0, 0)))
                                     {
-                                        <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                                        <li class="gw-inspector-list-item">
                                             <span class="font-mono">@summary.PackageName</span>
                                             <span class="ml-2">+@summary.AddedClassCount / -@summary.RemovedClassCount / Δ@summary.ChangedClassCount</span>
                                         </li>
@@ -226,17 +226,17 @@
 
                     @if (IsSectionOpen(SectionXml))
                     {
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+                        <div class="gw-inspector-section">
                             <div class="grid gap-3 md:grid-cols-3">
-                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                <div class="gw-inspector-stat-card">
                                     <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Added Nodes</div>
                                     <div class="mt-2 text-lg font-semibold text-slate-900">@Item.XmlDetail.AddedNodes</div>
                                 </div>
-                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                <div class="gw-inspector-stat-card">
                                     <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Removed Nodes</div>
                                     <div class="mt-2 text-lg font-semibold text-slate-900">@Item.XmlDetail.RemovedNodes</div>
                                 </div>
-                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                <div class="gw-inspector-stat-card">
                                     <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Changed Nodes</div>
                                     <div class="mt-2 text-lg font-semibold text-slate-900">@Item.XmlDetail.ChangedNodeCount</div>
                                 </div>
@@ -244,7 +244,7 @@
                             <ul class="mt-3 space-y-2">
                                 @foreach (var xpath in Item.XmlDetail.ChangedXPaths.DefaultIfEmpty("-"))
                                 {
-                                    <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@xpath</li>
+                                    <li class="gw-inspector-list-item font-mono">@xpath</li>
                                 }
                             </ul>
                             <div class="mt-4">
@@ -252,7 +252,7 @@
                                 <ul class="mt-2 space-y-2">
                                     @foreach (var change in Item.XmlDetail.Changes.DefaultIfEmpty(new XmlChangeEntry("-", "none", null, null)))
                                     {
-                                        <li class="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-700">
+                                        <li class="gw-inspector-stat-card text-xs text-slate-700">
                                             <div class="font-semibold uppercase tracking-[0.14em] text-slate-500">@change.ChangeKind</div>
                                             <div class="mt-2 font-mono">@change.Path</div>
                                             <div class="mt-2 text-slate-500">@(change.CurrentValue ?? "-") -> @(change.PatchValue ?? "-")</div>
@@ -278,17 +278,17 @@
 
                     @if (IsSectionOpen(SectionYaml))
                     {
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+                        <div class="gw-inspector-section">
                             <div class="grid gap-3 md:grid-cols-3">
-                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                <div class="gw-inspector-stat-card">
                                     <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Added Keys</div>
                                     <div class="mt-2 text-lg font-semibold text-slate-900">@Item.YamlDetail.AddedKeys</div>
                                 </div>
-                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                <div class="gw-inspector-stat-card">
                                     <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Removed Keys</div>
                                     <div class="mt-2 text-lg font-semibold text-slate-900">@Item.YamlDetail.RemovedKeys</div>
                                 </div>
-                                <div class="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                                <div class="gw-inspector-stat-card">
                                     <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Changed Nodes</div>
                                     <div class="mt-2 text-lg font-semibold text-slate-900">@Item.YamlDetail.ChangedNodeCount</div>
                                 </div>
@@ -296,7 +296,7 @@
                             <ul class="mt-3 space-y-2">
                                 @foreach (var path in Item.YamlDetail.ChangedPaths.DefaultIfEmpty("-"))
                                 {
-                                    <li class="rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">@path</li>
+                                    <li class="gw-inspector-list-item font-mono">@path</li>
                                 }
                             </ul>
                         </div>
@@ -306,96 +306,3 @@
         </div>
     }
 </div>
-
-@code {
-    [Parameter] public ComparisonItemResult? Item { get; set; }
-    [Parameter] public string? CurrentArtifactPath { get; set; }
-    [Parameter] public string? PatchArtifactPath { get; set; }
-    [Parameter] public bool CanOpenCurrentArtifact { get; set; }
-    [Parameter] public bool CanOpenPatchArtifact { get; set; }
-    [Parameter] public EventCallback<string?> OnOpenPath { get; set; }
-    [Parameter] public EventCallback OnClose { get; set; }
-    [Parameter] public bool ShowCloseButton { get; set; }
-    [Parameter] public bool CompactMode { get; set; }
-    [Parameter] public string PanelClass { get; set; } = "gw-panel flex min-h-0 flex-col overflow-hidden";
-
-    private const string SectionSourceFiles = "source-files";
-    private const string SectionRule = "rule";
-    private const string SectionHash = "hash";
-    private const string SectionMessages = "messages";
-    private const string SectionJar = "jar";
-    private const string SectionXml = "xml";
-    private const string SectionYaml = "yaml";
-
-    private readonly HashSet<string> _openSections = new(StringComparer.OrdinalIgnoreCase);
-    private string? _lastSectionStateKey;
-
-    protected override void OnParametersSet()
-    {
-        var sectionStateKey = $"{CompactMode}:{Item?.RelativePath}";
-        if (string.Equals(sectionStateKey, _lastSectionStateKey, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        _lastSectionStateKey = sectionStateKey;
-        ResetSectionState();
-    }
-
-    private Task OpenPathAsync(string? path)
-        => OnOpenPath.HasDelegate ? OnOpenPath.InvokeAsync(path) : Task.CompletedTask;
-
-    private Task CloseAsync()
-        => OnClose.HasDelegate ? OnClose.InvokeAsync() : Task.CompletedTask;
-
-    private void ToggleSection(string section)
-    {
-        if (!_openSections.Add(section))
-        {
-            _openSections.Remove(section);
-        }
-    }
-
-    private bool IsSectionOpen(string section)
-        => _openSections.Contains(section);
-
-    private void ResetSectionState()
-    {
-        _openSections.Clear();
-
-        _openSections.Add(SectionSourceFiles);
-        _openSections.Add(SectionRule);
-        _openSections.Add(SectionHash);
-        _openSections.Add(SectionMessages);
-
-        if (!CompactMode)
-        {
-            if (Item?.JarDetail is not null)
-            {
-                _openSections.Add(SectionJar);
-            }
-
-            if (Item?.XmlDetail is not null)
-            {
-                _openSections.Add(SectionXml);
-            }
-
-            if (Item?.YamlDetail is not null)
-            {
-                _openSections.Add(SectionYaml);
-            }
-        }
-    }
-
-    private static string GetStatusBadgeClass(CompareStatus status)
-        => status switch
-        {
-            CompareStatus.Ok => "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200",
-            CompareStatus.Changed => "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200",
-            CompareStatus.Added => "bg-blue-100 text-blue-700 ring-1 ring-inset ring-blue-200",
-            CompareStatus.Removed => "bg-slate-200 text-slate-700 ring-1 ring-inset ring-slate-300",
-            CompareStatus.MissingRequired => "bg-red-100 text-red-700 ring-1 ring-inset ring-red-200",
-            CompareStatus.Error => "bg-fuchsia-100 text-fuchsia-700 ring-1 ring-inset ring-fuchsia-200",
-            _ => "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
-        };
-}

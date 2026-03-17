@@ -6,6 +6,7 @@ using NexusWorks.Guardian.Evaluation;
 using NexusWorks.Guardian.Infrastructure;
 using NexusWorks.Guardian.Models;
 using YamlDotNet.Serialization;
+using static NexusWorks.Guardian.GuardianConstants;
 
 namespace NexusWorks.Guardian.Comparison;
 
@@ -82,9 +83,9 @@ public sealed class JarComparer : IJarComparer
             }
         }
 
-        var manifestChanged = changed.Contains("META-INF/MANIFEST.MF", StringComparer.OrdinalIgnoreCase)
-            || added.Contains("META-INF/MANIFEST.MF", StringComparer.OrdinalIgnoreCase)
-            || removed.Contains("META-INF/MANIFEST.MF", StringComparer.OrdinalIgnoreCase);
+        var manifestChanged = changed.Contains(JarPath.ManifestPath, StringComparer.OrdinalIgnoreCase)
+            || added.Contains(JarPath.ManifestPath, StringComparer.OrdinalIgnoreCase)
+            || removed.Contains(JarPath.ManifestPath, StringComparer.OrdinalIgnoreCase);
 
         var addedClasses = added.Where(IsClassEntry).ToArray();
         var removedClasses = removed.Where(IsClassEntry).ToArray();
@@ -138,7 +139,7 @@ public sealed class JarComparer : IJarComparer
     }
 
     private static bool IsClassEntry(string entryPath)
-        => entryPath.EndsWith(".class", StringComparison.OrdinalIgnoreCase);
+        => entryPath.EndsWith(FileExtension.Class, StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyList<JarPackageChangeSummary> BuildPackageSummaries(
         IReadOnlyList<string> addedClasses,
@@ -185,15 +186,15 @@ public sealed class JarComparer : IJarComparer
         var normalized = entryPath.Replace('\\', '/');
         normalized = normalized switch
         {
-            var path when path.StartsWith("BOOT-INF/classes/", StringComparison.OrdinalIgnoreCase) => path["BOOT-INF/classes/".Length..],
-            var path when path.StartsWith("WEB-INF/classes/", StringComparison.OrdinalIgnoreCase) => path["WEB-INF/classes/".Length..],
+            var path when path.StartsWith(JarPath.BootInfClassesPrefix, StringComparison.OrdinalIgnoreCase) => path[JarPath.BootInfClassesPrefix.Length..],
+            var path when path.StartsWith(JarPath.WebInfClassesPrefix, StringComparison.OrdinalIgnoreCase) => path[JarPath.WebInfClassesPrefix.Length..],
             _ => normalized,
         };
 
         var directory = Path.GetDirectoryName(normalized)?.Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(directory))
         {
-            return "(root)";
+            return JarPath.RootPackageName;
         }
 
         return directory.Replace('/', '.');
@@ -273,33 +274,162 @@ public sealed class XmlComparer : IXmlComparer
             counters.RecordChange($"{path}/text()", "text", current.TextValue, patch.TextValue);
         }
 
-        var childCount = Math.Max(current.Children.Count, patch.Children.Count);
+        // Sorted merge: group children by element name, then match within each group
+        // by canonical key (attributes + text) to handle reordering gracefully.
+        var currentGroups = GroupChildrenByName(current.Children);
+        var patchGroups = GroupChildrenByName(patch.Children);
+
+        var allNames = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var key in currentGroups.Keys) allNames.Add(key);
+        foreach (var key in patchGroups.Keys) allNames.Add(key);
+
         var nameCounters = new Dictionary<string, int>(StringComparer.Ordinal);
-        for (var index = 0; index < childCount; index++)
+        foreach (var name in allNames)
         {
-            var currentChild = index < current.Children.Count ? current.Children[index] : null;
-            var patchChild = index < patch.Children.Count ? patch.Children[index] : null;
-            var childName = currentChild?.Name ?? patchChild?.Name ?? "node";
-            var occurrence = nameCounters.TryGetValue(childName, out var existing) ? existing + 1 : 1;
-            nameCounters[childName] = occurrence;
-            var childPath = $"{path}/{childName}[{occurrence}]";
+            currentGroups.TryGetValue(name, out var currentChildren);
+            patchGroups.TryGetValue(name, out var patchChildren);
+            var currentList = (IReadOnlyList<NormalizedXmlNode>?)currentChildren ?? Array.Empty<NormalizedXmlNode>();
+            var patchList = (IReadOnlyList<NormalizedXmlNode>?)patchChildren ?? Array.Empty<NormalizedXmlNode>();
 
-            if (currentChild is null)
+            // Match nodes within the same-name group using canonical keys
+            var matched = MatchNodesByKey(currentList, patchList);
+
+            foreach (var (currentChild, patchChild) in matched)
             {
-                RegisterChangedPath(changedPaths, childPath);
-                counters.RecordAdded(childPath, DescribeNode(patchChild));
-                continue;
-            }
+                var occurrence = nameCounters.TryGetValue(name, out var existing) ? existing + 1 : 1;
+                nameCounters[name] = occurrence;
+                var childPath = $"{path}/{name}[{occurrence}]";
 
-            if (patchChild is null)
-            {
-                RegisterChangedPath(changedPaths, childPath);
-                counters.RecordRemoved(childPath, DescribeNode(currentChild));
-                continue;
-            }
+                if (currentChild is null)
+                {
+                    RegisterChangedPath(changedPaths, childPath);
+                    counters.RecordAdded(childPath, DescribeNode(patchChild));
+                    continue;
+                }
 
-            CompareNodes(currentChild, patchChild, childPath, changedPaths, counters);
+                if (patchChild is null)
+                {
+                    RegisterChangedPath(changedPaths, childPath);
+                    counters.RecordRemoved(childPath, DescribeNode(currentChild));
+                    continue;
+                }
+
+                CompareNodes(currentChild, patchChild, childPath, changedPaths, counters);
+            }
         }
+    }
+
+    /// <summary>Groups child nodes by element name, preserving order within each group.</summary>
+    private static Dictionary<string, List<NormalizedXmlNode>> GroupChildrenByName(IReadOnlyList<NormalizedXmlNode> children)
+    {
+        var groups = new Dictionary<string, List<NormalizedXmlNode>>(StringComparer.Ordinal);
+        foreach (var child in children)
+        {
+            if (!groups.TryGetValue(child.Name, out var list))
+            {
+                list = [];
+                groups[child.Name] = list;
+            }
+
+            list.Add(child);
+        }
+
+        return groups;
+    }
+
+    /// <summary>
+    /// Matches nodes from current and patch lists by canonical key (sorted attributes + text).
+    /// Unmatched nodes are paired with null to represent additions or removals.
+    /// Uses a sorted merge approach: O(n log n) sort + O(n) merge instead of O(n²) positional scan.
+    /// </summary>
+    private static List<(NormalizedXmlNode? Current, NormalizedXmlNode? Patch)> MatchNodesByKey(
+        IReadOnlyList<NormalizedXmlNode> currentNodes,
+        IReadOnlyList<NormalizedXmlNode> patchNodes)
+    {
+        // Fast path: if both lists have only one element, match them directly
+        if (currentNodes.Count <= 1 && patchNodes.Count <= 1)
+        {
+            var result = new List<(NormalizedXmlNode?, NormalizedXmlNode?)>(Math.Max(currentNodes.Count, patchNodes.Count));
+            if (currentNodes.Count == 1 && patchNodes.Count == 1)
+            {
+                result.Add((currentNodes[0], patchNodes[0]));
+            }
+            else if (currentNodes.Count == 1)
+            {
+                result.Add((currentNodes[0], null));
+            }
+            else if (patchNodes.Count == 1)
+            {
+                result.Add((null, patchNodes[0]));
+            }
+
+            return result;
+        }
+
+        // Build keyed lists and sort by canonical key for merge-join
+        var currentKeyed = currentNodes.Select(node => (Key: CanonicalKey(node), Node: node)).ToList();
+        var patchKeyed = patchNodes.Select(node => (Key: CanonicalKey(node), Node: node)).ToList();
+        currentKeyed.Sort((a, b) => string.Compare(a.Key, b.Key, StringComparison.Ordinal));
+        patchKeyed.Sort((a, b) => string.Compare(a.Key, b.Key, StringComparison.Ordinal));
+
+        var pairs = new List<(NormalizedXmlNode?, NormalizedXmlNode?)>(Math.Max(currentKeyed.Count, patchKeyed.Count));
+        var ci = 0;
+        var pi = 0;
+
+        while (ci < currentKeyed.Count && pi < patchKeyed.Count)
+        {
+            var cmp = string.Compare(currentKeyed[ci].Key, patchKeyed[pi].Key, StringComparison.Ordinal);
+            if (cmp == 0)
+            {
+                pairs.Add((currentKeyed[ci].Node, patchKeyed[pi].Node));
+                ci++;
+                pi++;
+            }
+            else if (cmp < 0)
+            {
+                pairs.Add((currentKeyed[ci].Node, null));
+                ci++;
+            }
+            else
+            {
+                pairs.Add((null, patchKeyed[pi].Node));
+                pi++;
+            }
+        }
+
+        while (ci < currentKeyed.Count)
+        {
+            pairs.Add((currentKeyed[ci].Node, null));
+            ci++;
+        }
+
+        while (pi < patchKeyed.Count)
+        {
+            pairs.Add((null, patchKeyed[pi].Node));
+            pi++;
+        }
+
+        return pairs;
+    }
+
+    /// <summary>
+    /// Produces a canonical string key from a node's attributes and text content,
+    /// used for matching structurally equivalent nodes across reordered siblings.
+    /// </summary>
+    private static string CanonicalKey(NormalizedXmlNode node)
+    {
+        var sb = new StringBuilder();
+        foreach (var pair in node.Attributes.OrderBy(static p => p.Key, StringComparer.Ordinal))
+        {
+            sb.Append(pair.Key).Append('=').Append(pair.Value).Append(';');
+        }
+
+        if (node.TextValue is not null)
+        {
+            sb.Append("##text=").Append(node.TextValue);
+        }
+
+        return sb.ToString();
     }
 
     private static bool DictionaryEquals(
@@ -592,130 +722,71 @@ public sealed class YamlComparer : IYamlComparer
     }
 }
 
-public sealed class GuardianFileComparer : IFileComparer
+/// <summary>
+/// Builds <see cref="ComparisonItemResult"/> instances from comparison data,
+/// separating result assembly from comparison orchestration.
+/// </summary>
+internal sealed class ComparisonResultBuilder
 {
-    private readonly IJarComparer _jarComparer;
-    private readonly IXmlComparer _xmlComparer;
-    private readonly IYamlComparer _yamlComparer;
     private readonly IStatusEvaluator _statusEvaluator;
-    private readonly IGuardianLogger _logger;
 
-    public GuardianFileComparer(IJarComparer jarComparer, IXmlComparer xmlComparer, IYamlComparer yamlComparer, IStatusEvaluator statusEvaluator)
-        : this(jarComparer, xmlComparer, yamlComparer, statusEvaluator, NullGuardianLogger.Instance)
+    public ComparisonResultBuilder(IStatusEvaluator statusEvaluator)
     {
-    }
-
-    public GuardianFileComparer(IJarComparer jarComparer, IXmlComparer xmlComparer, IYamlComparer yamlComparer, IStatusEvaluator statusEvaluator, IGuardianLogger logger)
-    {
-        _jarComparer = jarComparer;
-        _xmlComparer = xmlComparer;
-        _yamlComparer = yamlComparer;
         _statusEvaluator = statusEvaluator;
-        _logger = logger;
     }
 
-    public ComparisonItemResult Compare(string relativePath, ResolvedRule rule, FileInventoryEntry? current, FileInventoryEntry? patch)
+    public ComparisonItemResult BuildMissingResult(
+        string relativePath, ResolvedRule rule, FileInventoryEntry? current, FileInventoryEntry? patch)
     {
-        try
-        {
-            if (current is null || patch is null)
-            {
-                var missingContext = new StatusEvaluationContext(
-                    rule.Required,
-                    current is not null,
-                    patch is not null,
-                    IsEquivalent: false,
-                    HasDifferences: current is not null || patch is not null,
-                    rule.FileType);
-                var missingOutcome = _statusEvaluator.Evaluate(missingContext);
+        var context = new StatusEvaluationContext(
+            rule.Required,
+            current is not null,
+            patch is not null,
+            IsEquivalent: false,
+            HasDifferences: current is not null || patch is not null,
+            rule.FileType);
+        var outcome = _statusEvaluator.Evaluate(context);
 
-                return CreateResult(relativePath, rule, current, patch, missingOutcome.Status, missingOutcome.Severity, missingOutcome.Summary, null, null, null, Array.Empty<string>());
-            }
-
-            var messages = new List<string>();
-            JarCompareDetail? jarDetail = null;
-            XmlCompareDetail? xmlDetail = null;
-            YamlCompareDetail? yamlDetail = null;
-
-            var hashesMatch = string.Equals(current.Hash, patch.Hash, StringComparison.OrdinalIgnoreCase);
-            var isEquivalent = hashesMatch;
-            var hasDifferences = !hashesMatch;
-
-            if (!hashesMatch && rule.CompareMode.HasFlag(CompareMode.XmlStructure) && rule.FileType == GuardianFileType.Xml)
-            {
-                xmlDetail = _xmlComparer.Compare(current.AbsolutePath, patch.AbsolutePath);
-                isEquivalent = xmlDetail.IsEquivalent;
-                hasDifferences = !xmlDetail.IsEquivalent;
-                messages.Add(xmlDetail.IsEquivalent
-                    ? "Raw hash differs, but normalized XML is equivalent."
-                    : $"XML structure changed at {xmlDetail.ChangedXPaths.Count} path(s).");
-            }
-            else if (!hashesMatch && rule.CompareMode.HasFlag(CompareMode.YamlStructure) && rule.FileType == GuardianFileType.Yaml)
-            {
-                yamlDetail = _yamlComparer.Compare(current.AbsolutePath, patch.AbsolutePath);
-                isEquivalent = yamlDetail.IsEquivalent;
-                hasDifferences = !yamlDetail.IsEquivalent;
-                messages.Add(yamlDetail.IsEquivalent
-                    ? "Raw hash differs, but normalized YAML is equivalent."
-                    : $"YAML structure changed at {yamlDetail.ChangedPaths.Count} path(s).");
-            }
-            else if (!hashesMatch && rule.CompareMode.HasFlag(CompareMode.JarEntry) && rule.FileType == GuardianFileType.Jar)
-            {
-                jarDetail = _jarComparer.Compare(current.AbsolutePath, patch.AbsolutePath);
-                isEquivalent = jarDetail.IsEquivalent;
-                hasDifferences = !jarDetail.IsEquivalent;
-                messages.Add(jarDetail.IsEquivalent
-                    ? "Raw hash differs, but JAR entries are equivalent."
-                    : $"JAR entries changed: +{jarDetail.AddedEntries.Count} / -{jarDetail.RemovedEntries.Count} / Δ{jarDetail.ChangedEntries.Count}.");
-            }
-            else if (hashesMatch)
-            {
-                messages.Add("Hashes match.");
-            }
-            else
-            {
-                messages.Add("Raw hash differs.");
-            }
-
-            var outcome = _statusEvaluator.Evaluate(new StatusEvaluationContext(
-                rule.Required,
-                CurrentExists: true,
-                PatchExists: true,
-                isEquivalent,
-                hasDifferences,
-                rule.FileType));
-
-            var summary = messages.Count > 0 ? messages[0] : outcome.Summary;
-            return CreateResult(relativePath, rule, current, patch, outcome.Status, outcome.Severity, summary, jarDetail, xmlDetail, yamlDetail, messages);
-        }
-        catch (Exception ex)
-        {
-            var outcome = _statusEvaluator.Evaluate(new StatusEvaluationContext(
-                rule.Required,
-                current is not null,
-                patch is not null,
-                IsEquivalent: false,
-                HasDifferences: false,
-                rule.FileType,
-                HasError: true));
-
-            _logger.ItemError(relativePath, rule.RuleId, ex);
-            var errorDetail = $"{ex.GetType().Name}: {ex.Message}";
-            return CreateResult(relativePath, rule, current, patch, outcome.Status, outcome.Severity, errorDetail, null, null, null, new[] { errorDetail, $"StackTrace: {ex.StackTrace}" });
-        }
+        return Assemble(relativePath, rule, current, patch, outcome.Status, outcome.Severity, outcome.Summary, null, null, null, Array.Empty<string>());
     }
 
-    private static ComparisonItemResult CreateResult(
-        string relativePath,
-        ResolvedRule rule,
-        FileInventoryEntry? current,
-        FileInventoryEntry? patch,
-        CompareStatus status,
-        Severity severity,
-        string summary,
-        JarCompareDetail? jarDetail,
-        XmlCompareDetail? xmlDetail,
-        YamlCompareDetail? yamlDetail,
+    public ComparisonItemResult BuildComparedResult(
+        string relativePath, ResolvedRule rule, FileInventoryEntry current, FileInventoryEntry patch,
+        bool isEquivalent, bool hasDifferences, string message,
+        JarCompareDetail? jarDetail, XmlCompareDetail? xmlDetail, YamlCompareDetail? yamlDetail)
+    {
+        var outcome = _statusEvaluator.Evaluate(new StatusEvaluationContext(
+            rule.Required,
+            CurrentExists: true,
+            PatchExists: true,
+            isEquivalent,
+            hasDifferences,
+            rule.FileType));
+
+        return Assemble(relativePath, rule, current, patch, outcome.Status, outcome.Severity, message, jarDetail, xmlDetail, yamlDetail, new[] { message });
+    }
+
+    public ComparisonItemResult BuildErrorResult(
+        string relativePath, ResolvedRule rule, FileInventoryEntry? current, FileInventoryEntry? patch, Exception ex)
+    {
+        var outcome = _statusEvaluator.Evaluate(new StatusEvaluationContext(
+            rule.Required,
+            current is not null,
+            patch is not null,
+            IsEquivalent: false,
+            HasDifferences: false,
+            rule.FileType,
+            HasError: true));
+
+        var errorDetail = $"{ex.GetType().Name}: {ex.Message}";
+        return Assemble(relativePath, rule, current, patch, outcome.Status, outcome.Severity, errorDetail, null, null, null, new[] { errorDetail, $"StackTrace: {ex.StackTrace}" });
+    }
+
+    private static ComparisonItemResult Assemble(
+        string relativePath, ResolvedRule rule,
+        FileInventoryEntry? current, FileInventoryEntry? patch,
+        CompareStatus status, Severity severity, string summary,
+        JarCompareDetail? jarDetail, XmlCompareDetail? xmlDetail, YamlCompareDetail? yamlDetail,
         IReadOnlyList<string> messages)
         => new(
             relativePath,
@@ -733,4 +804,75 @@ public sealed class GuardianFileComparer : IFileComparer
             xmlDetail,
             yamlDetail,
             messages);
+}
+
+public sealed class GuardianFileComparer : IFileComparer
+{
+    private readonly IJarComparer _jarComparer;
+    private readonly IXmlComparer _xmlComparer;
+    private readonly IYamlComparer _yamlComparer;
+    private readonly ComparisonResultBuilder _resultBuilder;
+    private readonly IGuardianLogger _logger;
+
+    public GuardianFileComparer(IJarComparer jarComparer, IXmlComparer xmlComparer, IYamlComparer yamlComparer, IStatusEvaluator statusEvaluator)
+        : this(jarComparer, xmlComparer, yamlComparer, statusEvaluator, NullGuardianLogger.Instance)
+    {
+    }
+
+    public GuardianFileComparer(IJarComparer jarComparer, IXmlComparer xmlComparer, IYamlComparer yamlComparer, IStatusEvaluator statusEvaluator, IGuardianLogger logger)
+    {
+        _jarComparer = jarComparer;
+        _xmlComparer = xmlComparer;
+        _yamlComparer = yamlComparer;
+        _resultBuilder = new ComparisonResultBuilder(statusEvaluator);
+        _logger = logger;
+    }
+
+    public ComparisonItemResult Compare(string relativePath, ResolvedRule rule, FileInventoryEntry? current, FileInventoryEntry? patch)
+    {
+        try
+        {
+            if (current is null || patch is null)
+            {
+                return _resultBuilder.BuildMissingResult(relativePath, rule, current, patch);
+            }
+
+            var hashesMatch = string.Equals(current.Hash, patch.Hash, StringComparison.OrdinalIgnoreCase);
+
+            if (!hashesMatch && rule.CompareMode.HasFlag(CompareMode.XmlStructure) && rule.FileType == GuardianFileType.Xml)
+            {
+                var xmlDetail = _xmlComparer.Compare(current.AbsolutePath, patch.AbsolutePath);
+                var message = xmlDetail.IsEquivalent
+                    ? "Raw hash differs, but normalized XML is equivalent."
+                    : $"XML structure changed at {xmlDetail.ChangedXPaths.Count} path(s).";
+                return _resultBuilder.BuildComparedResult(relativePath, rule, current, patch, xmlDetail.IsEquivalent, !xmlDetail.IsEquivalent, message, null, xmlDetail, null);
+            }
+
+            if (!hashesMatch && rule.CompareMode.HasFlag(CompareMode.YamlStructure) && rule.FileType == GuardianFileType.Yaml)
+            {
+                var yamlDetail = _yamlComparer.Compare(current.AbsolutePath, patch.AbsolutePath);
+                var message = yamlDetail.IsEquivalent
+                    ? "Raw hash differs, but normalized YAML is equivalent."
+                    : $"YAML structure changed at {yamlDetail.ChangedPaths.Count} path(s).";
+                return _resultBuilder.BuildComparedResult(relativePath, rule, current, patch, yamlDetail.IsEquivalent, !yamlDetail.IsEquivalent, message, null, null, yamlDetail);
+            }
+
+            if (!hashesMatch && rule.CompareMode.HasFlag(CompareMode.JarEntry) && rule.FileType == GuardianFileType.Jar)
+            {
+                var jarDetail = _jarComparer.Compare(current.AbsolutePath, patch.AbsolutePath);
+                var message = jarDetail.IsEquivalent
+                    ? "Raw hash differs, but JAR entries are equivalent."
+                    : $"JAR entries changed: +{jarDetail.AddedEntries.Count} / -{jarDetail.RemovedEntries.Count} / Δ{jarDetail.ChangedEntries.Count}.";
+                return _resultBuilder.BuildComparedResult(relativePath, rule, current, patch, jarDetail.IsEquivalent, !jarDetail.IsEquivalent, message, jarDetail, null, null);
+            }
+
+            var hashMessage = hashesMatch ? "Hashes match." : "Raw hash differs.";
+            return _resultBuilder.BuildComparedResult(relativePath, rule, current, patch, hashesMatch, !hashesMatch, hashMessage, null, null, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.ItemError(relativePath, rule.RuleId, ex);
+            return _resultBuilder.BuildErrorResult(relativePath, rule, current, patch, ex);
+        }
+    }
 }

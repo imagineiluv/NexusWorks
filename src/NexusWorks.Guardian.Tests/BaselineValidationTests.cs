@@ -231,7 +231,7 @@ public class BaselineValidationTests
 
         var baselinePath = artifacts.WriteBaselineWorkbook("baseline.xlsx", rules);
         var reader = new ClosedXmlBaselineReader();
-        var result = reader.Read(baselinePath);
+        var result = reader.Read(baselinePath).Rules;
 
         result.Should().ContainSingle();
         result[0].Required.Should().Be(expected);
@@ -278,7 +278,7 @@ public class BaselineValidationTests
 
         var baselinePath = artifacts.WriteBaselineWorkbook("baseline.xlsx", rules);
         var reader = new ClosedXmlBaselineReader();
-        var result = reader.Read(baselinePath);
+        var result = reader.Read(baselinePath).Rules;
 
         result.Should().ContainSingle();
         result[0].CompareMode.Should().Be(expectedMode);
@@ -309,7 +309,7 @@ public class BaselineValidationTests
 
         var baselinePath = artifacts.WriteBaselineWorkbook("baseline.xlsx", rules);
         var reader = new ClosedXmlBaselineReader();
-        var result = reader.Read(baselinePath);
+        var result = reader.Read(baselinePath).Rules;
 
         result.Should().ContainSingle();
         result[0].FileType.Should().Be(expected);

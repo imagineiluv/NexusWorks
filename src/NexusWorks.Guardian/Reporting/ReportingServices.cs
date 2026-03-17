@@ -58,10 +58,12 @@ public sealed class StaticHtmlReportWriter : IHtmlReportWriter
     {
         ArgumentNullException.ThrowIfNull(report);
 
-        var statusCards = BuildCards(report.Summary.StatusCounts, "Status");
-        var severityCards = BuildCards(report.Summary.SeverityCounts, "Severity");
-        var performanceRows = BuildPerformanceRows(report.Summary.StageMetrics);
+        var css = HtmlReportStyleGenerator.Generate();
+        var statusCards = HtmlReportDataConverter.BuildCards(report.Summary.StatusCounts, "Status");
+        var severityCards = HtmlReportDataConverter.BuildCards(report.Summary.SeverityCounts, "Severity");
+        var performanceRows = HtmlReportDataConverter.BuildPerformanceRows(report.Summary.StageMetrics);
         var itemsJson = JsonSerializer.Serialize(report.Result.Items, JsonOptions);
+        var js = HtmlReportScriptGenerator.Generate(itemsJson);
 
         var html = $$"""
 <!DOCTYPE html>
@@ -71,204 +73,7 @@ public sealed class StaticHtmlReportWriter : IHtmlReportWriter
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{WebUtility.HtmlEncode(report.ReportTitle)}}</title>
   <style>
-    :root {
-      --canvas: #f3f5f7;
-      --panel: #ffffff;
-      --ink: #14202b;
-      --line: #d7dde4;
-      --muted: #5f6f7f;
-      --primary: #0f5f88;
-      --ok: #0b8f57;
-      --changed: #c57b00;
-      --added: #0f75d9;
-      --removed: #5d6976;
-      --missing: #d22f27;
-      --error: #a12665;
-      --shadow: 0 20px 45px rgba(20, 32, 43, 0.08);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Inter", "Segoe UI", sans-serif;
-      background: linear-gradient(180deg, #e7edf3 0%, var(--canvas) 32%);
-      color: var(--ink);
-    }
-    .page {
-      max-width: 1440px;
-      margin: 0 auto;
-      padding: 32px 24px 48px;
-    }
-    .hero {
-      background: #11202e;
-      color: #f5f7fa;
-      border-radius: 24px;
-      padding: 28px 32px;
-      box-shadow: var(--shadow);
-    }
-    .hero h1 { margin: 0 0 8px; font-size: 32px; }
-    .hero p { margin: 0; color: #b8c6d3; }
-    .meta {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-      margin-top: 18px;
-    }
-    .meta-card, .card, .table-card, .detail-card {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
-    }
-    .meta-card {
-      padding: 16px 18px;
-      background: rgba(255,255,255,0.1);
-      border-color: rgba(255,255,255,0.12);
-    }
-    .sections {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 24px;
-      margin-top: 24px;
-    }
-    .cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 16px;
-      margin-top: 24px;
-    }
-    .card {
-      padding: 18px;
-    }
-    .card .eyebrow {
-      display: inline-flex;
-      font-size: 12px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-    .card .value {
-      margin-top: 12px;
-      font-size: 28px;
-      font-weight: 700;
-    }
-    .card .key {
-      margin-top: 6px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-    .table-card, .detail-card {
-      overflow: hidden;
-    }
-    .toolbar {
-      padding: 16px 18px;
-      border-bottom: 1px solid var(--line);
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: center;
-    }
-    .toolbar input {
-      width: min(360px, 100%);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 10px 12px;
-      font: inherit;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th, td {
-      padding: 12px 14px;
-      text-align: left;
-      border-bottom: 1px solid #ecf0f3;
-      font-size: 14px;
-      vertical-align: top;
-    }
-    th {
-      background: #f8fafc;
-      color: var(--muted);
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-    tbody tr {
-      cursor: pointer;
-    }
-    tbody tr:hover,
-    tbody tr.is-active {
-      background: #f3f8fc;
-    }
-    .table-wrap {
-      max-height: 760px;
-      overflow: auto;
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: white;
-    }
-    .badge.ok { background: var(--ok); }
-    .badge.changed { background: var(--changed); }
-    .badge.added { background: var(--added); }
-    .badge.removed { background: var(--removed); }
-    .badge.missingrequired { background: var(--missing); }
-    .badge.error { background: var(--error); }
-    .detail-card {
-      padding: 20px;
-      min-height: 640px;
-    }
-    .detail-card h2 {
-      margin: 0 0 10px;
-      font-size: 24px;
-    }
-    .detail-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 18px;
-    }
-    .detail-field {
-      padding: 14px;
-      border-radius: 14px;
-      background: #f8fafc;
-      border: 1px solid #e6edf3;
-    }
-    .detail-field strong {
-      display: block;
-      font-size: 12px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 8px;
-    }
-    .mono {
-      font-family: "JetBrains Mono", "SFMono-Regular", monospace;
-      word-break: break-all;
-    }
-    .list {
-      margin: 10px 0 0;
-      padding-left: 18px;
-    }
-    .stack {
-      display: grid;
-      gap: 12px;
-    }
-    @media (max-width: 1120px) {
-      .sections { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 720px) {
-      .page { padding: 18px 14px 28px; }
-      .hero { padding: 20px; }
-      .detail-grid { grid-template-columns: 1fr; }
-      .toolbar { flex-direction: column; align-items: stretch; }
-    }
+    {{css}}
   </style>
 </head>
 <body>
@@ -278,7 +83,7 @@ public sealed class StaticHtmlReportWriter : IHtmlReportWriter
       <p>Guardian patch inspection report generated at {{report.Summary.CompletedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}}.</p>
       <div class="meta">
         <div class="meta-card"><strong>Execution ID</strong><div class="mono">{{WebUtility.HtmlEncode(report.Summary.ExecutionId)}}</div></div>
-        <div class="meta-card"><strong>Total Duration</strong><div class="mono">{{WebUtility.HtmlEncode(FormatDuration(report.Summary.TotalDurationMs))}}</div></div>
+        <div class="meta-card"><strong>Total Duration</strong><div class="mono">{{WebUtility.HtmlEncode(HtmlReportDataConverter.FormatDuration(report.Summary.TotalDurationMs))}}</div></div>
         <div class="meta-card"><strong>Peak Workers</strong><div class="mono">{{report.Summary.PeakConcurrency}}</div></div>
         <div class="meta-card"><strong>Current Root</strong><div class="mono">{{WebUtility.HtmlEncode(report.Request.CurrentRootPath)}}</div></div>
         <div class="meta-card"><strong>Patch Root</strong><div class="mono">{{WebUtility.HtmlEncode(report.Request.PatchRootPath)}}</div></div>
@@ -345,6 +150,22 @@ public sealed class StaticHtmlReportWriter : IHtmlReportWriter
             <tbody id="resultsBody"></tbody>
           </table>
         </div>
+        <div class="pagination">
+          <button id="btnFirst" title="First page">&#x00AB;</button>
+          <button id="btnPrev" title="Previous page">&#x2039;</button>
+          <span id="pageInfo" class="page-info"></span>
+          <button id="btnNext" title="Next page">&#x203A;</button>
+          <button id="btnLast" title="Last page">&#x00BB;</button>
+          <label>Per page:
+            <select id="pageSizeSelect">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="250">250</option>
+              <option value="500">500</option>
+              <option value="0">All</option>
+            </select>
+          </label>
+        </div>
       </section>
 
       <aside class="detail-card">
@@ -354,157 +175,7 @@ public sealed class StaticHtmlReportWriter : IHtmlReportWriter
   </div>
 
   <script>
-    const items = {{itemsJson}};
-    const searchBox = document.getElementById('searchBox');
-    const resultsBody = document.getElementById('resultsBody');
-    const detailPanel = document.getElementById('detailPanel');
-    let activeIndex = 0;
-
-    function escapeHtml(value) {
-      return (value ?? '').toString()
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('\"', '&quot;')
-        .replaceAll(\"'\", '&#39;');
-    }
-
-    function badgeClass(status) {
-      return String(status).replaceAll('_', '').toLowerCase();
-    }
-
-    function renderRows(filterText) {
-      const normalized = filterText.trim().toLowerCase();
-      const filtered = items
-        .map((item, index) => ({ item, index }))
-        .filter(({ item }) => {
-          if (!normalized) {
-            return true;
-          }
-
-          const target = [
-            item.relativePath,
-            item.ruleId,
-            item.status,
-            item.severity,
-            item.fileType,
-            item.summary
-          ].join(' ').toLowerCase();
-
-          return target.includes(normalized);
-        });
-
-      if (filtered.length === 0) {
-        resultsBody.innerHTML = '<tr><td colspan="6">No results match the current filter.</td></tr>';
-        detailPanel.innerHTML = '<div class="detail-field">No item selected.</div>';
-        return;
-      }
-
-      if (!filtered.some(entry => entry.index === activeIndex)) {
-        activeIndex = filtered[0].index;
-      }
-
-      resultsBody.innerHTML = filtered.map(({ item, index }) => `
-        <tr data-index="${index}" class="${index === activeIndex ? 'is-active' : ''}">
-          <td class="mono">${escapeHtml(item.relativePath)}</td>
-          <td><span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span></td>
-          <td>${escapeHtml(item.severity)}</td>
-          <td class="mono">${escapeHtml(item.ruleId)}</td>
-          <td>${escapeHtml(item.fileType)}</td>
-          <td>${escapeHtml(item.summary)}</td>
-        </tr>`).join('');
-
-      for (const row of resultsBody.querySelectorAll('tr[data-index]')) {
-        row.addEventListener('click', () => {
-          activeIndex = Number(row.dataset.index);
-          renderRows(searchBox.value);
-        });
-      }
-
-      renderDetail(items[activeIndex]);
-    }
-
-    function renderDetail(item) {
-      const messages = (item.messages ?? []).map(message => `<li>${escapeHtml(message)}</li>`).join('');
-      const jarDetail = item.jarDetail
-        ? `
-          <div class="detail-field">
-            <strong>JAR Detail</strong>
-            <div>Manifest Changed: ${escapeHtml(String(item.jarDetail.manifestChanged))}</div>
-            <div>Added: ${item.jarDetail.addedEntries.length}</div>
-            <div>Removed: ${item.jarDetail.removedEntries.length}</div>
-            <div>Changed: ${item.jarDetail.changedEntries.length}</div>
-            <div>Class Delta: +${item.jarDetail.addedClassCount} / -${item.jarDetail.removedClassCount} / Δ${item.jarDetail.changedClassCount}</div>
-            <ul class="list mono">
-              ${item.jarDetail.addedEntries.map(entry => `<li>+ ${escapeHtml(entry)}</li>`).join('')}
-              ${item.jarDetail.removedEntries.map(entry => `<li>- ${escapeHtml(entry)}</li>`).join('')}
-              ${item.jarDetail.changedEntries.map(entry => `<li>* ${escapeHtml(entry)}</li>`).join('')}
-            </ul>
-            <ul class="list">
-              ${item.jarDetail.packageSummaries.map(summary => `<li>${escapeHtml(summary.packageName)}: +${summary.addedClassCount} / -${summary.removedClassCount} / Δ${summary.changedClassCount}</li>`).join('')}
-            </ul>
-          </div>`
-        : '';
-      const xmlDetail = item.xmlDetail
-        ? `
-          <div class="detail-field">
-            <strong>XML Detail</strong>
-            <div>Added Nodes: ${item.xmlDetail.addedNodes}</div>
-            <div>Removed Nodes: ${item.xmlDetail.removedNodes}</div>
-            <div>Changed Nodes: ${item.xmlDetail.changedNodeCount}</div>
-            <ul class="list mono">
-              ${item.xmlDetail.changedXPaths.map(path => `<li>${escapeHtml(path)}</li>`).join('')}
-            </ul>
-            <ul class="list">
-              ${item.xmlDetail.changes.map(change => `<li><strong>${escapeHtml(change.changeKind)}</strong> ${escapeHtml(change.path)}<br />${escapeHtml(change.currentValue ?? '-')} -> ${escapeHtml(change.patchValue ?? '-')}</li>`).join('')}
-            </ul>
-          </div>`
-        : '';
-      const yamlDetail = item.yamlDetail
-        ? `
-          <div class="detail-field">
-            <strong>YAML Detail</strong>
-            <div>Added Keys: ${item.yamlDetail.addedKeys}</div>
-            <div>Removed Keys: ${item.yamlDetail.removedKeys}</div>
-            <div>Changed Nodes: ${item.yamlDetail.changedNodeCount}</div>
-            <ul class="list mono">
-              ${item.yamlDetail.changedPaths.map(path => `<li>${escapeHtml(path)}</li>`).join('')}
-            </ul>
-          </div>`
-        : '';
-
-      detailPanel.innerHTML = `
-        <div>
-          <h2>${escapeHtml(item.relativePath)}</h2>
-          <span class="badge ${badgeClass(item.status)}">${escapeHtml(item.status)}</span>
-        </div>
-        <div class="detail-grid">
-          <div class="detail-field"><strong>Rule ID</strong><div class="mono">${escapeHtml(item.ruleId)}</div></div>
-          <div class="detail-field"><strong>Severity</strong><div>${escapeHtml(item.severity)}</div></div>
-          <div class="detail-field"><strong>File Type</strong><div>${escapeHtml(item.fileType)}</div></div>
-          <div class="detail-field"><strong>Compare Mode</strong><div>${escapeHtml(item.compareMode)}</div></div>
-          <div class="detail-field"><strong>Current Hash</strong><div class="mono">${escapeHtml(item.currentHash ?? '-')}</div></div>
-          <div class="detail-field"><strong>Patch Hash</strong><div class="mono">${escapeHtml(item.patchHash ?? '-')}</div></div>
-          <div class="detail-field"><strong>Current Exists</strong><div>${escapeHtml(String(item.currentExists))}</div></div>
-          <div class="detail-field"><strong>Patch Exists</strong><div>${escapeHtml(String(item.patchExists))}</div></div>
-          <div class="detail-field" style="grid-column: 1 / -1;">
-            <strong>Summary</strong>
-            <div>${escapeHtml(item.summary)}</div>
-          </div>
-          <div class="detail-field" style="grid-column: 1 / -1;">
-            <strong>Messages</strong>
-            <ul class="list">
-              ${messages || '<li>No additional messages.</li>'}
-            </ul>
-          </div>
-          ${jarDetail}
-          ${xmlDetail}
-          ${yamlDetail}
-        </div>`;
-    }
-
-    searchBox.addEventListener('input', event => renderRows(event.target.value));
-    renderRows('');
+    {{js}}
   </script>
 </body>
 </html>
@@ -512,61 +183,6 @@ public sealed class StaticHtmlReportWriter : IHtmlReportWriter
 
         File.WriteAllText(report.Artifacts.HtmlReportPath, html, Encoding.UTF8);
     }
-
-    private static string BuildCards(IReadOnlyDictionary<string, int> counts, string eyebrow)
-    {
-        var builder = new StringBuilder();
-        foreach (var pair in counts.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            builder.AppendLine($$"""
-      <article class="card">
-        <span class="eyebrow">{{WebUtility.HtmlEncode(eyebrow)}}</span>
-        <div class="value">{{pair.Value}}</div>
-        <div class="key">{{WebUtility.HtmlEncode(pair.Key)}}</div>
-      </article>
-""");
-        }
-
-        return builder.ToString();
-    }
-
-    private static string BuildPerformanceRows(IReadOnlyList<ExecutionStageMetric> stages)
-    {
-        if (stages.Count == 0)
-        {
-            return """
-            <tr>
-              <td colspan="5">No stage metrics captured.</td>
-            </tr>
-            """;
-        }
-
-        var builder = new StringBuilder();
-        foreach (var stage in stages)
-        {
-            builder.AppendLine($$"""
-            <tr>
-              <td>{{WebUtility.HtmlEncode(stage.StageName)}}</td>
-              <td>{{stage.ItemCount}}</td>
-              <td>{{WebUtility.HtmlEncode(FormatDuration(stage.DurationMs))}}</td>
-              <td>{{WebUtility.HtmlEncode(FormatThroughput(stage.ItemsPerSecond))}}</td>
-              <td>{{stage.Concurrency}}</td>
-            </tr>
-            """);
-        }
-
-        return builder.ToString();
-    }
-
-    private static string FormatDuration(double durationMs)
-        => durationMs >= 1000d
-            ? $"{durationMs / 1000d:0.00} s"
-            : $"{durationMs:0.##} ms";
-
-    private static string FormatThroughput(double itemsPerSecond)
-        => itemsPerSecond <= 0
-            ? "-"
-            : $"{itemsPerSecond:0.##} items/s";
 }
 
 public sealed class ClosedXmlExcelReportWriter : IExcelReportWriter

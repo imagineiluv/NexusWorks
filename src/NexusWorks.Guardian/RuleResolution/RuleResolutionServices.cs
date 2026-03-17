@@ -1,7 +1,9 @@
+using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using NexusWorks.Guardian.Infrastructure;
 using NexusWorks.Guardian.Models;
+using static NexusWorks.Guardian.GuardianConstants;
 
 namespace NexusWorks.Guardian.RuleResolution;
 
@@ -19,25 +21,34 @@ public sealed class BaselineRuleResolver : IRuleResolver
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
         ArgumentNullException.ThrowIfNull(rules);
 
-        var normalizedPath = NormalizedPathUtility.NormalizeRelativePath(relativePath);
+        // Engine candidate paths are pre-normalized; skip redundant work when possible
+        var normalizedPath = IsAlreadyNormalized(relativePath)
+            ? relativePath
+            : NormalizedPathUtility.NormalizeRelativePath(relativePath);
         var preparedRules = _preparedRuleSets.GetValue(rules, CreatePreparedRuleSet);
 
-        var exactMatch = preparedRules.ExactRules.GetValueOrDefault(normalizedPath);
-        if (exactMatch is not null)
+        if (preparedRules.ExactRules.TryGetValue(normalizedPath, out var exactMatch))
         {
-            return ResolvedRuleFactory.FromBaselineRule(exactMatch, normalizedPath, "exact");
+            return ResolvedRuleFactory.FromBaselineRule(exactMatch, normalizedPath, RuleSource.Exact);
         }
 
         foreach (var patternRule in preparedRules.PatternRules)
         {
             if (patternRule.Regex.IsMatch(normalizedPath))
             {
-                return ResolvedRuleFactory.FromBaselineRule(patternRule.Rule, normalizedPath, "pattern");
+                return ResolvedRuleFactory.FromBaselineRule(patternRule.Rule, normalizedPath, RuleSource.Pattern);
             }
         }
 
         return ResolvedRuleFactory.CreateDefault(normalizedPath);
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsAlreadyNormalized(string path)
+        => path.Length > 0
+           && !path.Contains('\\')
+           && path[0] != '/'
+           && !path.StartsWith("./", StringComparison.Ordinal);
 
     private static PreparedRuleSet CreatePreparedRuleSet(IReadOnlyList<BaselineRule> rules)
     {
@@ -59,7 +70,7 @@ public sealed class BaselineRuleResolver : IRuleResolver
             }
         }
 
-        return new PreparedRuleSet(exactRules, patternRules);
+        return new PreparedRuleSet(exactRules.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase), patternRules);
     }
 
     private static Regex BuildPatternRegex(string pattern)
@@ -71,18 +82,26 @@ public sealed class BaselineRuleResolver : IRuleResolver
             .Replace(@"\?", "[^/]")
             .Replace("___DOUBLE_WILDCARD___", ".*");
 
-        return new Regex($"^{regexPattern}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return new Regex($"^{regexPattern}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     }
 
     private sealed record PreparedPatternRule(BaselineRule Rule, Regex Regex);
 
     private sealed record PreparedRuleSet(
-        IReadOnlyDictionary<string, BaselineRule> ExactRules,
+        FrozenDictionary<string, BaselineRule> ExactRules,
         IReadOnlyList<PreparedPatternRule> PatternRules);
 }
 
 internal static class ResolvedRuleFactory
 {
+    /// <summary>Maps each structural file type to its corresponding structural CompareMode.</summary>
+    private static readonly Dictionary<GuardianFileType, CompareMode> StructuralModeMap = new()
+    {
+        [GuardianFileType.Jar] = CompareMode.JarEntry,
+        [GuardianFileType.Xml] = CompareMode.XmlStructure,
+        [GuardianFileType.Yaml] = CompareMode.YamlStructure,
+    };
+
     public static ResolvedRule FromBaselineRule(BaselineRule rule, string relativePath, string source)
     {
         var effectiveFileType = rule.FileType == GuardianFileType.Auto
@@ -105,22 +124,18 @@ internal static class ResolvedRuleFactory
     public static ResolvedRule CreateDefault(string relativePath)
     {
         var fileType = NormalizedPathUtility.InferFileType(relativePath);
-        var compareMode = fileType switch
-        {
-            GuardianFileType.Jar => CompareMode.Hash | CompareMode.JarEntry,
-            GuardianFileType.Xml => CompareMode.Hash | CompareMode.XmlStructure,
-            GuardianFileType.Yaml => CompareMode.Hash | CompareMode.YamlStructure,
-            _ => CompareMode.Hash,
-        };
+        var compareMode = StructuralModeMap.TryGetValue(fileType, out var structuralMode)
+            ? CompareMode.Hash | structuralMode
+            : CompareMode.Hash;
 
         return new ResolvedRule(
-            "AUTO",
+            AutoRuleId,
             fileType,
             compareMode,
             Required: false,
             DetailCompare: false,
             Exclude: false,
-            Source: fileType == GuardianFileType.Auto ? "system-default" : "auto-extension",
+            Source: fileType == GuardianFileType.Auto ? RuleSource.SystemDefault : RuleSource.AutoExtension,
             BaselineRule: null);
     }
 
@@ -132,34 +147,17 @@ internal static class ResolvedRuleFactory
             effectiveMode = CompareMode.Hash;
         }
 
-        if (fileType == GuardianFileType.Jar && detailCompare)
+        if (StructuralModeMap.TryGetValue(fileType, out var structuralMode))
         {
-            effectiveMode |= CompareMode.JarEntry;
-        }
+            if (detailCompare)
+            {
+                effectiveMode |= structuralMode;
+            }
 
-        if (fileType == GuardianFileType.Xml && detailCompare)
-        {
-            effectiveMode |= CompareMode.XmlStructure;
-        }
-
-        if (fileType == GuardianFileType.Yaml && detailCompare)
-        {
-            effectiveMode |= CompareMode.YamlStructure;
-        }
-
-        if (fileType == GuardianFileType.Jar && effectiveMode.HasFlag(CompareMode.JarEntry))
-        {
-            effectiveMode |= CompareMode.Hash;
-        }
-
-        if (fileType == GuardianFileType.Xml && effectiveMode.HasFlag(CompareMode.XmlStructure))
-        {
-            effectiveMode |= CompareMode.Hash;
-        }
-
-        if (fileType == GuardianFileType.Yaml && effectiveMode.HasFlag(CompareMode.YamlStructure))
-        {
-            effectiveMode |= CompareMode.Hash;
+            if (effectiveMode.HasFlag(structuralMode))
+            {
+                effectiveMode |= CompareMode.Hash;
+            }
         }
 
         return effectiveMode;

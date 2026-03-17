@@ -1,0 +1,10 @@
+@* Reusable badge component for status, severity, and general labels. *@
+<span class="gw-badge @BadgeClass">@Text</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string BadgeClass { get; set; } = string.Empty;
+}

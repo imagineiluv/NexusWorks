@@ -137,6 +137,31 @@ public sealed record ComparisonItemResult(
         : new ReadOnlyCollection<string>(Messages.ToList());
 }
 
+public sealed record BaselineSettings(
+    string? ReportTitle = null,
+    string? ProjectName = null,
+    string? DefaultHashAlgorithm = null)
+{
+    public static readonly BaselineSettings Default = new();
+}
+
+public sealed record ExcludePattern(string Pattern, string? Notes = null);
+
+public sealed record SeverityOverride(
+    GuardianFileType FileType,
+    CompareStatus Status,
+    Severity Severity);
+
+public sealed record BaselineWorkbook(
+    IReadOnlyList<BaselineRule> Rules,
+    BaselineSettings Settings,
+    IReadOnlyList<ExcludePattern> GlobalExcludes,
+    IReadOnlyList<SeverityOverride> SeverityOverrides)
+{
+    public static BaselineWorkbook FromRulesOnly(IReadOnlyList<BaselineRule> rules)
+        => new(rules, BaselineSettings.Default, Array.Empty<ExcludePattern>(), Array.Empty<SeverityOverride>());
+}
+
 public sealed record ComparisonOptions(
     TimeSpan? Timeout = null,
     int? MaxConcurrency = null,
